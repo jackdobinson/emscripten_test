@@ -1,1 +1,4 @@
-deconv_testing/{share,bin,archive,lib}/
+deconv_testing/share/
+deconv_testing/bin/
+deconv_testing/archive/
+deconv_testing/lib/
