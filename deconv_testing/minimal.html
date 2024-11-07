@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en-us">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<link rel="stylesheet" href="minimal.css" />
+		<title>Emscripten-Generated Code</title>
+	</head>
+
+	<body>
+		<hr/>
+		
+		<figure style="overflow:visible;" id="spinner">
+			<div class="spinner"></div>
+			<center style="margin-top:0.5em"><strong>aopp_deconv_tool</strong></center>
+		</figure>
+
+		<div class="emscripten" id="status">
+			Downloading...
+		</div>
+		
+		<div class="emscripten">
+			<progress value="0" max="100" id="progress" hidden=false>
+			Initializing
+			</progress>  
+		</div>
+
+		<div class="emscripten-hide-boilerplate" style="display:block;width=100%">
+			<canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+			<hr/>
+		
+			<div class="emscripten" style="display:none;">
+				<input type="checkbox" id="resize">Resize canvas
+				<input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer
+				&nbsp;&nbsp;&nbsp;
+				<input type="button"
+					value="Fullscreen"
+					onclick="
+						Module.requestFullscreen(
+						document.getElementById('pointerLock').checked, 
+						document.getElementById('resize').checked)
+					"
+				>
+			</div>
+		</div>
+
+
+		<div class="emscripten_border">
+
+			<div class="h-flow">
+				<div class="v-flow canvas-container">
+					<div class="item">
+						<label for="sci_file">
+							<div class="button-like">
+								Select Science Target File...
+							</div>
+						</label>
+						<input type="file" id="sci_file" name="sci_file" style="display: none;">
+						<canvas id="sci_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+						</canvas>
+					</div>
+				</div>
+
+				<div class="v-flow canvas-container">
+					<div class="item">
+						<label for="psf_file">
+							<div class="button-like">
+								Select PSF File...
+							</div>
+						</label>
+						<input type="file" id="psf_file" name="psf_file" style="display:none;">
+						<canvas id="psf_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+						</canvas>
+					</div>
+				</div>
+			</div>
+
+		</div>
+
+		<div class="item">
+			<label for="n_max_iter">Maximum Iterations</label>
+			<input type="number" id="n_max_iter" value=20 required style="width:5em;">
+		</div>
+
+		<button class="run-button" id="run_deconv" type="button">Run Deconvolution</button>
+
+		<div class="h-flow">
+			<div class="item">
+				<canvas id="clean_map_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+			</div>
+			<div class="item">
+				<canvas id="residual_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+			</div>
+		</div>
+
+		<hr/>
+			<textarea class="emscripten" id="output" rows="8"></textarea>
+		<hr>
+		
+		<script type='text/javascript' src="emscripten_environment.js"></script>
+		<script async type="text/javascript" src="deconv.js"></script>
+		<script async type="text/javascript" src="image_holder.js"></script>
+		<script async type="text/javascript" src="main.js"></script>
+	</body>
+</html>

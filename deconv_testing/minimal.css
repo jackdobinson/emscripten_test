@@ -1,0 +1,108 @@
+
+
+
+
+
+.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+textarea.emscripten { font-family: monospace; width: 80%; }
+div.emscripten { text-align: center; }
+div.emscripten_border { border: 1px solid black; }
+/* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+canvas.emscripten { border: 0px none; background-color: black; }
+
+.spinner {
+	height: 50px;
+	width: 50px;
+	margin: 0px auto;
+	-webkit-animation: rotation .8s linear infinite;
+	-moz-animation: rotation .8s linear infinite;
+	-o-animation: rotation .8s linear infinite;
+	animation: rotation 0.8s linear infinite;
+	border-left: 10px solid rgb(0,150,240);
+	border-right: 10px solid rgb(0,150,240);
+	border-bottom: 10px solid rgb(0,150,240);
+	border-top: 10px solid rgb(100,0,200);
+	border-radius: 100%;
+	background-color: rgb(200,100,250);
+}
+@-webkit-keyframes rotation {
+	from {-webkit-transform: rotate(0deg);}
+	to {-webkit-transform: rotate(360deg);}
+}
+@-moz-keyframes rotation {
+	from {-moz-transform: rotate(0deg);}
+	to {-moz-transform: rotate(360deg);}
+}
+@-o-keyframes rotation {
+	from {-o-transform: rotate(0deg);}
+	to {-o-transform: rotate(360deg);}
+}
+@keyframes rotation {
+	from {transform: rotate(0deg);}
+	to {transform: rotate(360deg);}
+}
+
+canvas {
+	width: 100%;
+	image-rendering: pixelated;
+}
+
+#canvas {
+	display:block;
+	width : 50%;
+}
+
+
+div.h-flow{
+	display: flex;
+	flex-flow: row wrap;
+	> * {
+		flex: 1;
+		width: 30%;
+		border-left: 0.1rem solid black;
+		#margin-left: 1rem;
+		padding-left: 1rem;
+		padding-right: 1rem;
+	}	
+	:first-child {
+		border-left: none;
+	}
+	:last-child{
+		#margin-right: 1rem;
+		#padding-right: 1rem;
+	}
+
+}
+
+div.v-flow{
+	display: flex;
+	flex-flow: column wrap;
+	> * {
+		flex: 1;
+		border-top: 0.1rem solid black;
+		#margin-top: 1rem;
+		padding-top: 1rem;
+		padding-bottom: 1rem;
+	}
+	:first-child {
+		border-top: none;
+	}
+	:last-child{
+		#margin-bottom: 1rem;
+		#padding-bottom: 1rem;
+	}
+}
+
+div.canvas-container{
+	width=40%;
+}
+
+.button-like {
+	background: #DDDDDD;
+	padding: 0.2rem;
+	border: 0.2rem solid black;
+}
+
+.button-like:hover {
+	background: #EEEEEE;
+}
