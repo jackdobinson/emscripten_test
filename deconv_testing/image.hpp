@@ -25,8 +25,8 @@ struct PixelFormat{
 };
 
 
-const PixelFormat GreyscalePixelFormat(PixelFormatId::GREYSCALE, 1, {ChannelName::BRIGHTNESS});
-const PixelFormat RGBAPixelFormat(PixelFormatId::GREYSCALE, 4, {ChannelName::RED, ChannelName::GREEN, ChannelName::BLUE, ChannelName::ALPHA});
+static const PixelFormat GreyscalePixelFormat(PixelFormatId::GREYSCALE, 1, {ChannelName::BRIGHTNESS});
+static const PixelFormat RGBAPixelFormat(PixelFormatId::GREYSCALE, 4, {ChannelName::RED, ChannelName::GREEN, ChannelName::BLUE, ChannelName::ALPHA});
 
 
 struct Image{
