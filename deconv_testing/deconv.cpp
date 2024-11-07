@@ -1,19 +1,6 @@
 #include "deconv.hpp"
 
-// TODO:
-// * Am having trouble getting data out of this. For some reason
-// the event handler that populates the clean_map and residual canvases are
-// getting the same data. I can push data from inside C++ to a different canvas and it
-// is ok so I think it is the javascript side.
-//
-// POSSIBLE ANSWER: I think what is happening is that I am not allocating the resources
-// for the images permanently. I am allocating them statically in a function, then they
-// are cleaned up when they go out of scope. Which causes their data to get overwritten.
-// I need to store the allocated arrays somewhere, and retrieve them when I want to
-// alter the image.
-//
-//
-//
+
 using namespace emscripten;
 
 /*
@@ -90,7 +77,9 @@ js_ptr alloc(size_t size){
 	return (js_ptr)malloc(size);
 }
 
-
+// TODO: 
+// * Move into it's own file
+// * Document quirks, e.g. centering is around 1st pixel when convolving
 class FourierTransformer{
 	public:
 	using complex=std::complex<double>;
@@ -169,6 +158,15 @@ class FourierTransformer{
 	}
 };
 
+// TODO:
+// * Move into it's own file
+// * Can I make this more generic, i.e. can I write to a named canvas?
+// * Can I expose a set of "data sources" from CleanModifiedAlgorithm, create
+//   a load of these functions as "data representers", then associate "data sources"
+//   with "data representers" on the JS side? I.e. C++ give JS a handle to some raw
+//   data. JS (or here) has functions that display raw data. I associate raw data
+//   handles with display functions on JS side. C++ side updates raw data, JS side
+//   periodically calls display functions.
 EM_JS(void, send_to_js_canvas, (void* ptr, int size, int width, int height), {
 	console.log("TESTING EM_ASM");
 	console.log(ptr, size, width, height);
@@ -178,7 +176,17 @@ EM_JS(void, send_to_js_canvas, (void* ptr, int size, int width, int height), {
 	scratch_canvas_ctx.imageSmoothingEnabled = false;
 	scratch_canvas_ctx.putImageData(im_data, 0, 0);
 });
-		
+
+
+// TODO: 
+// * rewrite this to be easier to integrate with the JS side of things
+// * On the JS side, need to be able to get handles for any plots. So they need to be exposed here.
+// * The C++ side needs to be able to accept values from the JS interface to set algorithm parameters.
+// * Break up ".run()" method into smaller chunks. Ideally want to have a ".doIter()" method that does
+//   a single iteration.
+// * Should pre-allocate as much as possible. Ideally will be able to give JS side a chunk of memory
+//   where in-progress plot data will be written and have it update the plots in a loop.
+// * May need to run the C++ side in a web-worker.
 class CleanModifiedAlgorithm {
 	public:
 

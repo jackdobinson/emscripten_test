@@ -1,3 +1,6 @@
+*.swp
+*.swq
+*.swo
 deconv_testing/share/
 deconv_testing/bin/
 deconv_testing/archive/
