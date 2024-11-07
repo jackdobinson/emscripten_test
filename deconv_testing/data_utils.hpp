@@ -1,3 +1,6 @@
+#ifndef __DATA_UTILS_INCLUDED__
+#define __DATA_UTILS_INCLUDED__
+
 #include <cassert>
 #include <iostream>
 #include <vector>
@@ -820,3 +823,10 @@ namespace data_utils{
 
 }
 
+
+
+
+
+
+
+#endif //__DATA_UTILS_INCLUDED__

@@ -7,9 +7,9 @@
 #include <vector>
 #include <map>
 //#include "fitsio.h"
-#include <fftw3.h>
-#include <complex>
-#include <cmath>
+//#include <fftw3.h>
+//#include <complex>
+//#include <cmath>
 #include <functional>
 
 #include "emscripten.h"
@@ -31,7 +31,7 @@
 
 #include "emscripten/bind.h"
 #include "emscripten/val.h"
-
+#include "fft.hpp"
 
 namespace du = data_utils;
 
