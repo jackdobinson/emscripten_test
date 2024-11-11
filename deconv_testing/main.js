@@ -22,6 +22,8 @@ let psf_image_holder = new ImageHolder(psf_canvas, psf_file_picker, "change")
 let deconv_clean_map = null
 let deconv_residual = null
 
+let clean_modified_params = new CleanModifiedParameters(document.getElementById("parameter-container"))
+
 run_deconv_button.addEventListener("click", async (e)=>{
 		if ((sci_image_holder.name === null) || (psf_image_holder.name === null)) {
 			console.log("ERROR: Must have uploaded a science or psf image")
@@ -32,8 +34,13 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		let deconv_name = "test_deconvolver"
 
 		console.log("Creating deconvolver")
-		let n_max_iter = parseInt(n_max_iter_field.value, 10)
-		Module.create_deconvolver(deconv_type, deconv_name, n_max_iter)
+		//let n_max_iter = parseInt(n_max_iter_field.value, 10)
+		
+		
+		
+		Module.create_deconvolver(deconv_type, deconv_name)
+
+		clean_modified_params.set_params(deconv_type, deconv_name)
 
 		console.log("Running deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
 		await Module.run_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")

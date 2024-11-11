@@ -123,7 +123,7 @@ std::string current_deconv_name = "";
 
 
 
-int create_deconvolver(const std::string& deconv_type, const std::string& deconv_name, int max_n_iters){
+int create_deconvolver(const std::string& deconv_type, const std::string& deconv_name){//, int max_n_iters){
 	GET_LOGGER;
 
 	// Ensure we have good arguments
@@ -148,7 +148,7 @@ int create_deconvolver(const std::string& deconv_type, const std::string& deconv
 	current_deconv_name = deconv_name;
 
 	// Only have one deconvolver type for now, so use that one
-	clean_modified_deconvolvers[deconv_name] = CleanModifiedAlgorithm(max_n_iters);
+	clean_modified_deconvolvers[deconv_name] = CleanModifiedAlgorithm();
 
 	return 0;
 }
@@ -169,13 +169,15 @@ void run_deconvolver(
 	Image& sci_image = Storage::images[sci_image_name];
 	Image& psf_image = Storage::images[psf_image_name];
 
-	deconvolver.run(
+	deconvolver.prepare_observations(
 		sci_image.data,
 		sci_image.shape,
 		psf_image.data,
 		psf_image.shape,
 		run_tag
 	);
+	
+	deconvolver.run();
 
 	const std::span<std::byte>& temp = image_as_blob(deconvolver.BLOB_ID_CLEAN_MAP, deconvolver.clean_map);
 	LOG_DEBUG("sending clean_map to debug canvas");
@@ -256,18 +258,49 @@ int main(int argc, char** argv){
 	emscripten_sleep(100);
 
 	LOG_DEBUG("Running deconvolver");
-	deconv_algorithm.run(
+	deconv_algorithm.prepare_observations(
 		img_data,
 		du::as_type<size_t>(img_shape), 
 		psf_data, 
 		du::as_type<size_t>(psf_shape)
 	);
 	
+	deconv_algorithm.run();
+	
 
 
 }
 
-
+void set_deconvolver_parameters(
+		const std::string& deconv_type,
+		const std::string& deconv_name,
+		size_t _n_iter,
+		size_t _n_positive_iter,
+		double _loop_gain,
+		bool _adaptive_threshold,
+		double _threshold,
+		double _clean_beam_gaussian_sigma,
+		bool _add_residual,
+		double _noise_std,
+		double _rms_frac_threshold,
+		double _fabs_frac_threshold
+	){
+	CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
+	
+	deconvolver.n_iter= _n_iter;
+	deconvolver.n_positive_iter = _n_positive_iter;
+	deconvolver.loop_gain = _loop_gain;
+	//if (adaptive_threshold){
+	//deconvolver.threshold = -1;
+	//}else{
+	deconvolver.threshold = _threshold;
+	//}
+	deconvolver.clean_beam_gaussian_sigma = _clean_beam_gaussian_sigma;
+	deconvolver.add_residual = _add_residual;
+	deconvolver.noise_std = _noise_std;
+	deconvolver.rms_frac_threshold = _rms_frac_threshold;
+	deconvolver.fabs_frac_threshold = _fabs_frac_threshold;
+}
 
 EMSCRIPTEN_BINDINGS(my_module){
 	function("create_deconvolver", &create_deconvolver);
@@ -281,6 +314,8 @@ EMSCRIPTEN_BINDINGS(my_module){
 	function("TIFF_from_js_array", &TIFF_from_js_array);
 	function("get_byte_buffer", &get_byte_buffer);//, return_value_policy::reference());
 	function("alloc",&alloc);
+	
+	function("set_deconvolver_parameters",&set_deconvolver_parameters);
 
 };
 

@@ -44,7 +44,7 @@ CXXFLAGS=                       \
 	-sALLOW_MEMORY_GROWTH=1     \
 	-sEXPORTED_FUNCTIONS=[$(subst $(space),$(comma),$(EXPORT_FUNCS))] \
 	-mnontrapping-fptoint       \
-	-O0                         \
+	-O3                         \
 	$(LDIRS)                    \
 	$(IDIRS)                    \
 	-lfftw3                     \

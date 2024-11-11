@@ -33,6 +33,16 @@ namespace du = data_utils;
 
 extern "C" void send_to_js_canvas(void* ptr, int size, int width, int height);
 
+
+struct ParameterInformation{
+	std::string name;
+	std::string description;
+	std::string type;
+	std::string domain;
+	std::string default_value;
+};
+
+
 class CleanModifiedAlgorithm {
 	public:
 
@@ -50,6 +60,8 @@ class CleanModifiedAlgorithm {
 	double noise_std;
 	double rms_frac_threshold;
 	double fabs_frac_threshold;
+	size_t data_size;
+	std::vector<size_t> data_shape;
 	std::vector<double> residual_data;
 	std::vector<double> components_data;
 	std::vector<double> clean_map;
@@ -94,13 +106,19 @@ class CleanModifiedAlgorithm {
 		std::vector<size_t>
 	> _ensure_odd(const std::vector<double>& obs_data, const std::vector<size_t>& obs_shape);
 
-	void run(
+	void doIter(
+		size_t i
+	);
+	
+	void prepare_observations(
 		std::vector<double>& obs_data, 
 		std::vector<size_t> obs_shape, 
 		const std::vector<double>& psf_data, 
 		const std::vector<size_t>& psf_shape,
 		const std::string& run_tag=""
 	);
+	
+	void run();
 
 };
 

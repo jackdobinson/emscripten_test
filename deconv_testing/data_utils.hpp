@@ -136,7 +136,7 @@ namespace data_utils{
 
 	// Create Array Mask
 	template <class T>
-	std::vector<bool> mask_where(const std::vector<T>& a, std::function<bool(T)> condition_func){
+	std::vector<bool> mask_where(const std::vector<T>& a, std::function<bool(T)>&& condition_func){
 		std::vector<bool> mask(a.size());
 		for (size_t i=0; i<a.size(); ++i){
 			mask[i] = condition_func(a[i]);

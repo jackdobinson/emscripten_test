@@ -60,18 +60,16 @@ div.h-flow{
 		flex: 1;
 		width: 30%;
 		border-left: 0.1rem solid black;
-		#margin-left: 1rem;
 		padding-left: 1rem;
 		padding-right: 1rem;
 	}	
 	:first-child {
 		border-left: none;
 	}
+	/*
 	:last-child{
-		#margin-right: 1rem;
-		#padding-right: 1rem;
 	}
-
+	*/
 }
 
 div.v-flow{
@@ -80,21 +78,76 @@ div.v-flow{
 	> * {
 		flex: 1;
 		border-top: 0.1rem solid black;
-		#margin-top: 1rem;
 		padding-top: 1rem;
 		padding-bottom: 1rem;
 	}
 	:first-child {
 		border-top: none;
 	}
+	/*
 	:last-child{
-		#margin-bottom: 1rem;
-		#padding-bottom: 1rem;
+	}
+	*/
+}
+
+.param-container{
+	display:grid;
+	grid-template-columns: max-content max-content;
+	grid-auto-rows: auto;
+	
+	.param-control{
+		grid-column-start: 1;
+		grid-column-end: 3;
+		display: grid;
+		grid-template-columns: subgrid;
+		
+		border: 1px solid #FFFFFF;
+	}
+	
+	.param-control:hover{
+		border: 1px solid black;
+	}
+
+	.param-control-label{
+		grid-column-start: 1;
+		padding-right:1em;
+	}
+
+	.param-control-input{
+		grid-column-start: 2;
+		margin-left:auto;
+	}
+	.param-integer,.param-real,.param-real\(0\,1\){
+		width: 5rem;
 	}
 }
 
+
+
+
+
+.has-tooltip {
+	position:relative;
+}
+
+.tooltip{
+	display:none;
+	position:absolute;
+	z-index:1;
+}
+
+.has-tooltip:hover .tooltip{
+	display:inline-block;
+	background-color: #FFFFFF;
+	margin: 0.5em;
+	padding: 0.2em;
+	border: solid 1px black;
+	left: 100%;
+	width: 30em;
+}
+
 div.canvas-container{
-	width=40%;
+	width: 40%;
 }
 
 .button-like {
