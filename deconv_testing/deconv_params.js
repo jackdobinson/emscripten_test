@@ -266,7 +266,7 @@ class ControlManager{
 }
 
 class CleanModifiedParameters{
-	static n_iter = new Parameter('n_iter', 'Maximum number of iterations to perform', 'integer', Number, 100)
+	static n_iter = new Parameter('n_iter', 'Maximum number of iterations to perform', 'integer', Number, 10)
 	static adaptive_threshold_flag = new Parameter("adaptive_threshold_flag", "If true, will apply heuteristics to find the optimal threshold at each iteration and not rely upon a manually set threshold", "bool", Boolean, false)
 	static threshold = new Parameter('threshold', "Fraction of the residual's brightest pixel, above which a pixel will be selected as a 'source pixel'", "real(0,1)", Number, 0.3)
 	static loop_gain = new Parameter("loop_gain", "What fraction of a selected pixel is treated as a 'source' each iteration", "real(0,1)", Number, 0.1)

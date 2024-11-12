@@ -14,7 +14,7 @@ using namespace emscripten;
 //   handles with display functions on JS side. C++ side updates raw data, JS side
 //   periodically calls display functions.
 EM_JS(void, send_to_js_canvas, (void* ptr, int size, int width, int height), {
-	console.log("TESTING EM_ASM");
+	console.log("EM_JS: Sending image to canvas");
 	console.log(ptr, size, width, height);
 	let im_data = new ImageData(new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, size), width, height);
 	scratch_canvas.width = width;
@@ -23,6 +23,35 @@ EM_JS(void, send_to_js_canvas, (void* ptr, int size, int width, int height), {
 	scratch_canvas_ctx.putImageData(im_data, 0, 0);
 });
 
+
+EM_JS(void, update_js_plot, (const char* name, void* ptr, int size), {
+	name = UTF8ToString(name);
+	console.log("EM_JS: update_js_plot");
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if( !plot_name_map.has(name)){
+		console.log("EM_JS: plot name not found", name);
+		return;
+	}
+	plot_name_map.get(name).update(ptr, size);
+});
+
+EM_JS(void, js_plot_point, (const char* name, double x, double y), {
+	name = UTF8ToString(name);
+	console.log("EM_JS: js_plot_point");
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if(!plot_name_map.has(name)){
+		console.log("EM_JS: plot name not found", name);
+		console.log(plot_name_map);
+		return;
+	}
+	plot_name_map.get(name).draw_point(x,y);
+});
 
 // TODO: 
 // * rewrite this to be easier to integrate with the JS side of things
@@ -62,7 +91,8 @@ CleanModifiedAlgorithm::CleanModifiedAlgorithm(
 		selected_pixels(0), 
 		current_convolved(0),
 		fabs_record(_n_iter), 
-		rms_record(_n_iter), 
+		rms_record(_n_iter),
+		threshold_record(_n_iter),
 		fft(), 
 		ifft(), 
 		psf_fft(), 
@@ -167,7 +197,65 @@ void CleanModifiedAlgorithm::__str__(){
 
 void CleanModifiedAlgorithm::_calc_pixel_threshold(){
 	//px_threshold = threshold * du::max(residual_data);
-	px_threshold = threshold * du::absmax(residual_data);
+	if (threshold > 0){
+		// Static threshold as a fraction of brightest pixel of the residual
+		px_threshold = threshold * du::absmax(residual_data);
+	}
+	else {
+		puts("NOTE: Using Otsu's method for thresholding");
+		// Otsu's method
+		// Minimises the intra-class variance (variance of pixels inside a class)
+		//
+		// probability of in bin i of histogram, p_i = f_i/N, f_i is number of pixels in bin i, N is total number of pixels
+		// for class 'c' with boundaries [t0,t1), mean of class is sum(p_i*x(i)) from i(t0) to i(t1), 
+		// where i(x) gets the histogram bin of value x, and x(i) is the midpoint value of histogram bin i.
+		// u_c = Sum(x(i)*p_i)_{i_0}^{i_1}/(i_1-i_0)
+		// variance is averange square distance from mean
+		// sigma_c^2 = sum( p_i*(x(i)-u_c)^2 )
+		//           = sum( p_i*(x(i)^2 -2*x(i)*u_c + u_c^2) )
+		//           = sum( p_i*x(i)^2 -2*p_i*x(i)*u_c + p_i*u_c^2)
+				
+		// sort based on indices
+		std::sort(indices.data(), indices.data()+indices.size(), [this](const short a, const short b)->bool{return (residual_data[a] < residual_data[b]);});
+		
+		
+		
+		//std::vector<double> class_sum_prob(indices.data());
+		//std::vector<double> class_mean(indices.data());
+		double total_mean = 0;
+		double p_i = 1.0/indices.size();
+		for(const double x : residual_data){
+			total_mean += p_i*x;
+		}
+		
+		double cumulative_prob = 0;
+		double cumulative_value = 0;
+		double cumulative_mean = 0;
+		double class_1_adj_prob = 0;
+		double class_1_sigma = 0, class_2_sigma=0;
+		double intra_class_variance = 0;
+		double min_intra_class_variance = 1E300; // very large number
+		short min_threshold_index = 0;
+		for(short i=0; i<indices.size(); ++i){
+			cumulative_value += residual_data[i];
+			cumulative_prob += p_i;
+			class_1_adj_prob = (p_i/cumulative_prob);
+			cumulative_mean += class_1_adj_prob*cumulative_value;
+			class_1_sigma = 0;
+			class_2_sigma = 0;
+			for(short j=0; i< indices.size(); ++j){
+				class_1_sigma += class_1_adj_prob*(residual_data[i] - cumulative_mean)*(residual_data[i] - cumulative_mean);
+				class_2_sigma += p_i/(1-cumulative_prob)*(residual_data[i] - (total_mean - cumulative_mean))*(residual_data[i] - (total_mean - cumulative_mean));
+				
+			}
+			intra_class_variance = cumulative_prob*class_1_sigma + (1-cumulative_prob)*class_2_sigma;
+			if (intra_class_variance < min_intra_class_variance){
+				min_threshold_index = i;
+			}
+		}
+		
+		px_threshold = residual_data[min_threshold_index];
+	}
 }
 
 void CleanModifiedAlgorithm::_select_update_pixels(){
@@ -214,7 +302,7 @@ void CleanModifiedAlgorithm::doIter(
 	
 	LOGV_DEBUG(i);
 		
-	emscripten_sleep(1);
+	
 
 	_calc_pixel_threshold();
 	
@@ -249,8 +337,17 @@ void CleanModifiedAlgorithm::doIter(
 
 	fabs_record[i] = du::max(du::apply(residual_data, abs ));
 	rms_record[i] = sqrt(du::sum(du::apply(residual_data, du::square ))/residual_data.size());
+	threshold_record[i] = px_threshold;
 	//LOGV_DEBUG(fabs_record[i]);
 	//LOGV_DEBUG(rms_record[i]);
+	
+	// magic values here for now
+	//update_js_plot("fabs_record", fabs_record.data(), fabs_record.size());
+	js_plot_point("fabs_record", i, fabs_record[i]);
+	//update_js_plot("rms_record", rms_record.data(), rms_record.size());
+	//update_js_plot("threshold_record", threshold_record.data(), threshold_record.size());
+	
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }
 
 void CleanModifiedAlgorithm::prepare_observations(
@@ -283,6 +380,11 @@ void CleanModifiedAlgorithm::prepare_observations(
 	selected_px_fft.resize(data_size);
 	current_convolved.resize(data_size);
 	components_data.resize(data_size);
+	
+	indices.resize(data_size);
+	for(short i=0; i<indices.size(); ++i){
+		indices[i] = i;
+	}
 
 	du::multiply_inplace(components_data, 0);
 

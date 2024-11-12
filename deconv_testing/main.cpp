@@ -216,6 +216,9 @@ emscripten::val get_deconvolver_residual(
 int main(int argc, char** argv){
 	INIT_LOGGING("DEBUG");
 	GET_LOGGER;
+	
+	// Return here if we don't want to run the test bits
+	return 0;
 
 	
 	// Use this to test the routines
@@ -290,17 +293,23 @@ void set_deconvolver_parameters(
 	deconvolver.n_iter= _n_iter;
 	deconvolver.n_positive_iter = _n_positive_iter;
 	deconvolver.loop_gain = _loop_gain;
-	//if (adaptive_threshold){
-	//deconvolver.threshold = -1;
-	//}else{
-	deconvolver.threshold = _threshold;
-	//}
+	if (_adaptive_threshold){
+		deconvolver.threshold = -1;
+	}else{
+		deconvolver.threshold = _threshold;
+	}
 	deconvolver.clean_beam_gaussian_sigma = _clean_beam_gaussian_sigma;
 	deconvolver.add_residual = _add_residual;
 	deconvolver.noise_std = _noise_std;
 	deconvolver.rms_frac_threshold = _rms_frac_threshold;
 	deconvolver.fabs_frac_threshold = _fabs_frac_threshold;
+	
+	// Update other deconvolver attributes that depend on these params
+	deconvolver.fabs_record.resize(_n_iter, NAN); 
+	deconvolver.rms_record.resize(_n_iter, NAN);
+	deconvolver.threshold_record.resize(_n_iter, NAN); 
 }
+
 
 EMSCRIPTEN_BINDINGS(my_module){
 	function("create_deconvolver", &create_deconvolver);

@@ -29,6 +29,8 @@
 #include "js_glue.hpp"
 //#include "tiff_helper.hpp"
 
+#include <cstdlib>
+
 namespace du = data_utils;
 
 extern "C" void send_to_js_canvas(void* ptr, int size, int width, int height);
@@ -71,8 +73,7 @@ class CleanModifiedAlgorithm {
 	std::vector<double> padded_psf_data;
 	std::vector<double> selected_pixels;
 	std::vector<double> current_convolved;
-	std::vector<double> fabs_record;
-	std::vector<double> rms_record;
+	
 	FourierTransformer fft;
 	FourierTransformer ifft;
 
@@ -80,6 +81,15 @@ class CleanModifiedAlgorithm {
 	std::vector<FourierTransformer::complex> selected_px_fft;
 
 	std::string tag;
+	
+	// Historical status
+	std::vector<double> fabs_record;
+	std::vector<double> rms_record;
+	std::vector<double> threshold_record;
+
+	// Otsu's method attributes
+	std::vector<short> indices;
+	//std::vector<double> mean
 
 	CleanModifiedAlgorithm(
 		size_t _n_iter = 1000,

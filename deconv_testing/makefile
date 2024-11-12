@@ -43,6 +43,7 @@ CXXFLAGS=                       \
 	-sENVIRONMENT=web           \
 	-sALLOW_MEMORY_GROWTH=1     \
 	-sEXPORTED_FUNCTIONS=[$(subst $(space),$(comma),$(EXPORT_FUNCS))] \
+	-sNO_DISABLE_EXCEPTION_CATCHING \
 	-mnontrapping-fptoint       \
 	-O3                         \
 	$(LDIRS)                    \
