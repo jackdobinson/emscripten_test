@@ -8,25 +8,49 @@ class R{
 	constructor(x,y,w,h){
 		this.r = V.from(x,y)
 		this.s = V.from(w,h)
+		
+		Object.seal(this)
 	}
 	
 	applyTransform(t){
+		let b = new R(0,0,1,1)
+		b.r = T.apply(t, this.r)
+		b.s = T.scale(t, this.s)
+		return b
+	}
+	
+	applyTransformInplace(t){
 		this.r = T.apply(t, this.r)
 		this.s = T.scale(t, this.s)
 		return this
 	}
 	
-	static getTransformFrom(a){
-		// get a transform from rect a coords to unit rect coords R(0,0,1,1)
-		return T.from(a.s[0], a.s[1], -a.r[0],-a.r[1])
+	asSvg(attrs){
+		// return an svg rect
+		// if height or width is -ve need to alter x and y coords
+		let rect = document.createElementNS('http://www.w3.org/2000/svg',"rect")
+		attrs.x = this.r[0] + (this.s[0] < 0 ? this.s[0] : 0)
+		attrs.y = this.r[1] + (this.s[1] < 0 ? this.s[1] : 0)
+		attrs.width = (this.s[0] < 0 ? -this.s[0] : this.s[0])
+		attrs.height = (this.s[1] < 0 ? -this.s[1] : this.s[1])
+		
+		for (const k of Object.keys(attrs)){
+			rect.setAttribute(k, attrs[k])
+		}
+		return rect
+	}
+	
+	static getTransformFromUnitCoordsTo(a){
+		// get a transform from unit coords (0,0,1,1) to rect coords
+		return T.from(a.s[0], a.s[1], a.r[0],a.r[1])
 	}
 
 	static getTransformFromTo(a, b){
 		// Get a transform from rect a coords to rect b coords
 		// both a and b have to be in the same coord system
-		a2u_transform = R.getTransformFrom(a)
-		b2u_transform = R.getTransformFrom(b)
-		return T.prod(b2u_transform.invert(), a2u_transform)
+		let u2a_transform = R.getTransformFromUnitCoordsTo(a)
+		let u2b_transform = R.getTransformFromUnitCoordsTo(b)
+		return T.prod(u2b_transform, T.invert(u2a_transform)) // a2u then u2b gives a2b
 	}
 
 	static intersect(r1, s1, r2, s2){

@@ -24,13 +24,48 @@ let deconv_residual = null
 
 let clean_modified_params = new CleanModifiedParameters(document.getElementById("parameter-container"))
 
+let svg_figure = new SvgFig(
+	"progress plots", 
+	document.getElementById("progress-plots"),
+	V.from(20,20),
+	new R(0,0,2,2)
+)
 let plot_name_map = new Map();
 
 
 
 
-plot_name_map.set("fabs_record", new SvgLinePlot("fabs_record", document.getElementById("progress-plots")))
+plot_name_map.set(
+	"fabs_record", 
+	new LogLinePlot({
+		label: "fabs_record", 
+		ax_labels: ['iteration', 'absolute brightest pixel fraction'],
+		ax_extent: E.from(0,1,0,1),//E.from(0,5,0,1),
+		svg_fig: svg_figure
+	})
+)
 
+plot_name_map.set(
+	"rms_record", 
+	new LogLinePlot({
+		label: "rms_record", 
+		ax_labels: ['iteration', 'residual rms'],
+		ax_extent: E.from(0,1,0,1),//E.from(0,5,0,1),
+		svg_fig: svg_figure,
+		p_rect_in_f: new R(1,0,1,1),
+	})
+)
+
+plot_name_map.set(
+	"threshold_record", 
+	new LogLinePlot({
+		label: "threshold_record", 
+		ax_labels: ['iteration', 'threshold value'],
+		ax_extent: E.from(0,1,0,1),//E.from(0,5,0,1),
+		svg_fig: svg_figure,
+		p_rect_in_f: new R(0,1,1,1),
+	})
+)
 
 
 run_deconv_button.addEventListener("click", async (e)=>{
@@ -50,6 +85,26 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		Module.create_deconvolver(deconv_type, deconv_name)
 
 		clean_modified_params.set_params(deconv_type, deconv_name)
+		// Automatically size the plot for the expected number of iterations
+		//plot_name_map.get("fabs_record").current_data_area.setExtent(E.from(0,clean_modified_params.n_iter_ctl.getValue(),0,1))
+		plot_name_map.get("fabs_record").current_data_area.setExtent(
+			E.from(
+				0,
+				clean_modified_params.n_iter_ctl.getValue(),
+				Math.log10(clean_modified_params.fabs_frac_threshold_ctl.getValue()),
+				0
+			)
+		)
+		plot_name_map.get("rms_record").current_data_area.setExtent(
+			E.from(
+				0,
+				clean_modified_params.n_iter_ctl.getValue(),
+				Math.log10(clean_modified_params.rms_frac_threshold_ctl.getValue()),
+				0
+			)
+		)
+		
+		console.log("run_deconv_button.addEventListener::click", Math.log10(clean_modified_params.fabs_frac_threshold_ctl.getValue()))
 
 		console.log("Running deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
 		await Module.run_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")

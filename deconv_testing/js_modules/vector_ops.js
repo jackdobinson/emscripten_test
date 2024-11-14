@@ -5,8 +5,15 @@ class V{
 	static zero = Float64Array.from([0,0])
 	static one =  Float64Array.from([1,1])
 	
-	static unit(i,n=2){
-		let v = new Float64Array(n)
+	static zeros(n=2,type=Float64Array){
+		return V.const_of_size(n, 0, type)
+	}
+	static ones(n=2, type=Float64Array){
+		return V.const_of_size(n, 1, type)
+	}
+	
+	static unit(i,n=2, type=Float64Array){
+		let v = new type(n)
 		for (let j=0;j<n;j++){
 			if(j==i){
 				v[j] = 1
@@ -17,16 +24,16 @@ class V{
 		return v
 	}
 
-	static of_size(n){
-		return new Float64Array(n)
+	static of_size(n, type=Float64Array){
+		return new type(n)
 	}
 
 	static from(...args){
 		return Float64Array.from(args)
 	}
 	
-	static from_matrix(m){
-		return Float64Array.from(m.elements)
+	static from_matrix(m, type=Float64Array){
+		return type.from(m.elements)
 	}
 
 	static typed_from(type, ...args){
@@ -34,8 +41,8 @@ class V{
 		return type.from(args)
 	}
 	
-	static const_of_size(n,c){
-		let v = new Float64Array(n)
+	static const_of_size(n,c,type=Float64Array){
+		let v = new type(n)
 		for(let i=0; i<n;i++){
 			v[i] = c
 		}

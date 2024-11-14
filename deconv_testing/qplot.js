@@ -1,3 +1,13 @@
+
+// TODO:
+// * Have a think about breaking up the dependence of DataArea and Axis upon eachother
+// * Want to have some way to draw arbitrary lines on plots e.g. "axvline" from matplotlib
+// * Ideally be able to hot-swap between log and non-log axes (plus others if possible)
+// * Would be nice to be able to have more than one set of axes on a DataArea
+// * Would be nice to plot multiple datasets in their own colour
+// * Would be nice to be able to set styles etc. of lines, text, markers etc.
+
+
 function createSvgElement(tag, attributes={}){
 	let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
 	for (const key of Object.keys(attributes)){
@@ -15,50 +25,120 @@ function setAttrsFor(element, ...attr_objs){
 	return element
 }
 
+function formatNumber(a, sig_figs=3, round_to=1E-12){
+	if (round_to != 0){
+		let diff = (a % round_to)
+		a += (diff > round_to/2) ? diff : -diff
+	}
+	return a.toPrecision(sig_figs)
+}
 
 class DataArea{
 	
-	static fromRect(
-			d_rect_in_p = new R(0.1,0.9,0.8,-0.8), // rectangle that defines this area in plot coords
-			d_rect_in_d = new R(0,0,1,1), // rectangle that defines this area in data coords
-		){
-		return new DataArea(
-			T.invert(R.getTransformFromTo(d_rect_in_d, d_rect_in_p)),
-			p_rect
-		)
-	}
-	
 	constructor(
 			label,
-			d2p_transform = T.invert(T.from(1,-1,0,1)), // data coords to plot coords transform
-			d_rect_in_p = new R(0,1,1,-1), // rectangle that defines the data area in plot coords
+			p2f_transform, // transform from plot coords to figure coords
+			d_rect_in_p = new R(0.2,0.8,0.6,-0.6), // rectangle that defines the data area in plot coords
+			d_extent = E.from(-1.5, 2, -1.5, 2), // extent that defines the data area coords
 			ax_labels=['x-axis', 'y-axis'], // labels for axes
-			
+			ax_auto_resize=[true,true], // should axes resize automatically when data is out of range?
+			n_max_data_points=1024, // Maximum number of data points that can be displayed at once
+			n_dim_data_points = 2, // number of dimensions the data has
+			data_storage_as_ringbuffer = true, // should the data storage work as a ringbuffer?
 		){
 		this.label = label
-		this.d2p_transform = d2p_transform // data coords to plot coords
-		this.p2d_transform = T.invert(d2p_transform)
+		this.p2f_transform = p2f_transform
 		this.d_rect_in_p = d_rect_in_p
+		this.d_extent = d_extent
+		this.ax_labels = ax_labels
+		this.ax_auto_resize = ax_auto_resize
+		this.n_max_data_points = n_max_data_points
+		this.n_dim_data_points = n_dim_data_points
+		this.data_storage_as_ringbuffer = data_storage_as_ringbuffer
+		
+		O.assert_has_attributes(this, 
+			"label", 
+			"p2f_transform", 
+			"d_rect_in_p", 
+			"d_extent", 
+			"ax_labels"
+		)
+		
+		this.n_displayed_data_points = 0
+		this.n_data_points = 0
+		// NOTE: data_point_storage stores the ORIGINAL VALUE of the data point, NOT THE TRANSFORMED VALUE
+		this.data_point_storage = V.of_size(this.n_dim_data_points*this.n_max_data_points, Float32Array) // don't need much precision
+		
+		// Unit to plot and unit to data transforms
+		this.u2p_transform = R.getTransformFromUnitCoordsTo(this.d_rect_in_p)
+		this.u2d_transform = E.getTransformFromUnitCoordsTo(this.d_extent)
+		console.log("DataArea: u2d_transform", this.u2d_transform)
+		
+		// Data to plot transforms
+		this.d2p_transform = T.prod(this.u2p_transform, T.invert(this.u2d_transform)) // d2u then u2p
+		console.log("DataArea: this.d2p_transform", this.d2p_transform)
+		this.p2d_transform = T.invert(this.d2p_transform)
+		
+		// Data to figure transform
+		this.d2f_transform = T.prod(this.p2f_transform, this.d2p_transform)
+		this.d_rect_in_f = this.d_rect_in_p.applyTransform(this.p2f_transform)
+		
+		console.log("DataArea", this.p2f_transform)
+		console.log("DataArea", this.d_rect_in_p, this.d_rect_in_f)
+		console.log("DataArea d2f_transform", this.d2f_transform)
 		
 		this.svg_group = createSvgElement("g", {class:"data-area "+this.label})
+		this.svg_axes_group = createSvgElement("g", {class:"axes"})
+		this.svg_data_group = createSvgElement("g", {class:"data"})
+		
+		this.svg_group.appendChild(this.svg_axes_group)
+		this.svg_group.appendChild(this.svg_data_group)
+		
 		
 		this.svg_scaling_factor =  2E-3*(V.accumulate_sum(V.component_abs(this.d_rect_in_p.s)))
 		console.log("svg_scaling_factor", this.svg_scaling_factor)
 		
+		/*
+		// debugging box
+		let bbox_width = 2E-2
+		let bbox_color = "blue"
+		this.svg_box = this.d_rect_in_f.asSvg({
+			"class":"data-area-bbox",
+			"stroke":bbox_color,
+			"stroke-width":bbox_width,
+			"fill":"none",
+			"stroke-opacity":0.3,
+		})
+		this.svg_group.appendChild(this.svg_box)
+		*/
 		
 		
-		this.axes = this.createAxes(ax_labels)
+		this.axes = this.createAxes(this.ax_labels)
 		
 		
+		this.prev_data_point = null
 		
 		// data display params
 		this.p2f_transform = null
 		this.d2f_transform = null
 		
-		this.marker_size = this.svg_scaling_factor
+		this.marker_size = 2*this.svg_scaling_factor
 		this.marker_colour = "blue"
 		this.marker_factory = (x,y)=>{
-			this.svg_group.appendChild(createSvgElement("circle", {x:x,y:y,r:this.marker_size,fill:this.marker_colour}))
+			return createSvgElement("circle", {cx:x,cy:y,r:this.marker_size,fill:this.marker_colour})
+		}
+		
+		this.line_width = this.svg_scaling_factor
+		this.line_colour = "blue"
+		this.line_factory = (x1,y1,x2,y2)=>{
+			return createSvgElement("line", {
+				x1:x1,
+				y1:y1,
+				x2:x2,
+				y2:y2,
+				stroke:this.line_colour,
+				"stroke-width":this.line_width,
+			})
 		}
 	}
 	
@@ -66,21 +146,150 @@ class DataArea{
 		return this.svg_group
 	}
 	
+	redrawPoints(){
+		console.log("DataArea::redrawPoints()")
+		//remove points
+		this.svg_data_group.replaceChildren()
+		let ringbuffer_full = this.data_storage_as_ringbuffer && (this.n_displayed_data_points == this.n_max_data_points)
+		
+		//
+		
+		console.log(this.n_data_points, this.n_displayed_data_points, ringbuffer_full, this.n_max_data_points, this.n_dim_data_points)
+		
+		let start_idx = 0
+		let count = this.n_data_points
+		if(ringbuffer_full){
+			start_idx = this.n_data_points
+			count = this.n_max_data_points
+		} else {
+		
+		}
+		
+		this.n_data_points = 0
+		this.n_displayed_data_points = 0
+		this.prev_data_point = null
+		
+		for(let i=0;i<count;i++){
+			let data_point = P.at(this.data_point_storage, (start_idx+i)%this.n_max_data_points, this.n_dim_data_points)
+			this.displayDataPoint(this.storeDataPoint(...data_point))
+			this.n_displayed_data_points++
+		}
+		
+	}
 	
-	add_data_point(x,y){
-		console.log("NOTE: THIS IS NOT WORKING RIGHT NOW")
-		console.log("add_data_point", x, y)
-		console.log(...T.apply(this.d2f_transform, V.from(x,y)))
-		this.marker_factory(...T.apply(this.d2f_transform, V.from(x,y)))
+	redrawAxes(){
+		console.log("DataArea::redrawAxes()")
+		this.svg_axes_group.replaceChildren()
+		this.axes = this.createAxes(this.ax_labels)
+		this.createAxesSvg()
+	}
+	
+	recalcDataToFigureTransform(){
+		this.d2f_transform = T.prod(this.p2f_transform, this.d2p_transform)
+		this.d_rect_in_f = this.d_rect_in_p.applyTransform(this.p2f_transform)
+		this.redrawAxes()
+		this.redrawPoints()
+	}
+	
+	recalcDataToPlotTransforms(){
+		this.d2p_transform = T.prod(this.u2p_transform, T.invert(this.u2d_transform)) // d2u then u2p
+		this.p2d_transform = T.invert(this.d2p_transform)
+	}
+	
+	setPlotToFigTransform(p2f_transform){
+		this.p2f_transform = p2f_transform
+		this.recalcDataToFigureTransform()
+	}
+	
+	setRect(d_rect_in_p){
+		this.d_rect_in_p = d_rect_in_p
+		this.u2p_transform = R.getTransformFromUnitCoordsTo(this.d_rect_in_p)
+		this.recalcDataToPlotTransforms()
+		this.recalcDataToFigureTransform()
+	}
+	
+	setExtent(d_extent){
+		console.log("DataArea::setExtent d_extent", d_extent)
+		this.d_extent = d_extent
+		this.u2d_transform = E.getTransformFromUnitCoordsTo(this.d_extent)
+		this.recalcDataToPlotTransforms()
+		this.recalcDataToFigureTransform()
+	}
+	
+	
+	add_data_point(...args){
+		let do_resize = false
+		let new_extent = V.copy(this.d_extent)
+		for(const [i, auto_resize_flag] of this.ax_auto_resize.entries()){
+			if (! auto_resize_flag){
+				continue
+			}
+			if (new_extent[2*i] > args[i]){
+				new_extent[2*i] = args[i]
+				do_resize = true
+			}
+			if (new_extent[2*i+1] < args[i]){
+				new_extent[2*i+1] = args[i]
+				do_resize = true
+			}
+		}
+		
+		if (do_resize){
+			this.setExtent(new_extent)
+		}
+		
+	
+		//console.log("DataArea::add_data_point()")
+		if(this.n_displayed_data_points == this.n_max_data_points){
+			if(this.data_storage_as_ringbuffer){
+				if (this.n_displayed_data_points == this.n_max_data_points){
+					this.svg_data_group.removeChild(this.svg_data_group.firstElementChild)
+					this.n_displayed_data_points--
+				}
+			} else {
+				throw new Error("DataArea is displaying too many datapoints at once")
+			}
+		}
+		
+		this.displayDataPoint(this.storeDataPoint(...args))
+		this.n_displayed_data_points++
+	}
+	
+	storeDataPoint(...args){
+		let data_point = P.set(this.data_point_storage, this.n_data_points, args, this.n_dim_data_points)
+		console.log("DataArea::storeDataPoint() args, data_point", args, data_point)
+		this.n_data_points++
+		
+		if (this.n_data_points >= this.n_max_data_points){
+			if (this.data_storage_as_ringbuffer){
+				this.n_data_points -= this.n_max_data_points
+			} else {
+				throw new Error("DataArea has run out of data storage and we are not using the data storage as a ringbuffer")
+			}
+		}
+		
+		return data_point
+	}
+	
+	displayDataPoint(data_point){
+		console.log("DataArea::displayDataPoint()")
+		
+		console.log(this.d2f_transform)
+		let transformed_point = T.apply(this.d2f_transform, data_point)
+		console.log(data_point, transformed_point)
+		
+		if (this.marker_factory !== null && this.marker_factory !== undefined){
+			this.svg_data_group.appendChild(this.marker_factory(...transformed_point))
+		}
+		if (this.line_factory !== null && this.line_factory !== undefined && this.prev_data_point !== null){
+			this.svg_data_group.appendChild(this.line_factory(...T.apply(this.d2f_transform, this.prev_data_point), ...transformed_point))
+		}
+		
+		this.prev_data_point = data_point
 	}
 	
 	getPlotCoordOfPoint(...args){
 		return [...T.apply(this.d2p_transform, args)]
-	}
-	
-	updateTransformFromDataRect(d_rect_in_d){
-		this.d2p_transform = R.getTransformFromTo(d_rect_in_d, this.d_rect_in_p)
-		this.p2d_transform = T.invert(this.d2p_transform)
 	}
 	
 	getPathOfConstantCoord(
@@ -145,8 +354,8 @@ class DataArea{
 			y_tick_positions_in_p, 
 			x_label_mod=1, 
 			y_label_mod=1, 
-			x_fmtr=(a)=>a.toPrecision(3), 
-			y_fmtr=(a)=>a.toPrecision(3),
+			x_fmtr=(a)=>formatNumber(a), 
+			y_fmtr=(a)=>formatNumber(a),
 		){
 		let x_ticklabels = []
 		let y_ticklabels = []
@@ -170,7 +379,7 @@ class DataArea{
 		return [x_ticklabels, y_ticklabels]
 	}
 	
-	createAxes(ax_labels=['x-axis', 'y-axis']){
+	createAxes(){
 		let ax_label_pos_in_p = [
 			V.add(this.d_rect_in_p.r, V.prod(this.d_rect_in_p.s, V.from(0.5,-0.15))),
 			V.add(this.d_rect_in_p.r, V.prod(this.d_rect_in_p.s, V.from(-0.2,0.5))),
@@ -189,7 +398,7 @@ class DataArea{
 				new Axis(
 					i,
 					[1,-1],
-					ax_labels[i],
+					this.ax_labels[i],
 					ax_label_pos_in_p[i],
 					ax_paths_in_p[i],
 					ax_tick_positions_in_p[i],
@@ -200,14 +409,12 @@ class DataArea{
 			)
 		}
 		for(const axis of axes){
-			this.svg_group.append(axis.svg())
+			this.svg_axes_group.append(axis.svg())
 		}
 		return axes
 	}
 	
-	createAxesSvg(p2f_transform){
-		this.p2f_transform = p2f_transform
-		this.d2f_transform = T.prod(this.p2f_transform, this.d2p_transform)
+	createAxesSvg(){
 		for(const axis of this.axes){
 			axis.createSvgElements(this.p2f_transform)
 		}
@@ -404,17 +611,37 @@ class PlotArea{
 		p_rect_in_f = new R(0,0,1,1), // rectangle that defines this plot area in figure coords
 	){
 		this.label = label
-		this.p_rect_in_f = p_rect_in_f
-		this.p2f_transform = R.getTransformFrom(p_rect_in_f) // plot area coords always go from (0,0) to (1,1)
+		this.setRect(p_rect_in_f)
+		
+		console.log("PlotArea", this.p2f_transform)
 		
 		this.svg_group = createSvgElement("g", {id:`plot-area ${this.label}`})
+		
+		/*
+		// debugging box
+		let bbox_width = 2E-2
+		let bbox_color = "green"
+		this.svg_box = this.p_rect_in_f.asSvg({
+			"class":"plot-area-bbox",
+			"stroke":bbox_color,
+			"stroke-width":bbox_width,
+			"fill":"none",
+			"stroke-opacity":0.3,
+		})
+		this.svg_group.appendChild(this.svg_box)
+		*/
 		
 		this.data_area_map = new Map()
 		this.current_data_area = null
 	}
 	
+	setRect(p_rect_in_f){
+		this.p_rect_in_f = p_rect_in_f
+		this.p2f_transform = R.getTransformFromUnitCoordsTo(p_rect_in_f) // plot area coords always go from (0,0) to (1,1)
+	}
+	
 	addDataArea(data_area){
-		data_area.createAxesSvg(this.p2f_transform)
+		data_area.setPlotToFigTransform(this.p2f_transform)
 		this.svg_group.appendChild(data_area.svg())
 		this.data_area_map.set(data_area.label, data_area)
 		this.setCurrentDataArea(data_area.label)
@@ -431,6 +658,10 @@ class PlotArea{
 	add_data_point(x,y){
 		this.current_data_area.add_data_point(x,y)
 	}
+	
+	addToFigure(svg_fig){
+		svg_fig.addPlotArea(this)
+	}
 }
 
 class SvgFig{
@@ -438,8 +669,9 @@ class SvgFig{
 			label, // label of the figure
 			parent_element, // element to attach the svg figure as a child of
 			s_scale=V.from(10,10), // scale of svg figure in screen coords
-			scale_units='cm', // units of svg figure scale in screen coords
 			f_rect_in_f=new R(0,0,1,1), // rectangle that defines how the figure coords relate to the screen coords
+			scale_units='cm', // units of svg figure scale in screen coords
+			
 			f_rect_units = '', // units of figure coords
 		){
 		this.label = label
@@ -455,6 +687,21 @@ class SvgFig{
 			width:`${s_scale[0]}${scale_units}`, // width of svg element
 			height:`${s_scale[1]}${scale_units}`, // height of svg element
 		})
+		
+		/*
+		// debugging box
+		let bbox_width = 2E-2
+		let bbox_color = "red"
+		this.svg_box = this.f_rect_in_f.asSvg({
+			"class":"figure-bbox",
+			"stroke":bbox_color,
+			"stroke-width":bbox_width,
+			"fill":"none",
+			"stroke-opacity":0.3,
+		})
+		this.svg.appendChild(this.svg_box)
+		*/
+		
 		this.updateViewbox()
 		
 		this.parent_element.appendChild(this.svg)
@@ -480,372 +727,38 @@ class SvgFig{
 	
 }
 
-class SvgLinePlot extends SvgFig{
-	constructor(...args){
-		super(...args)
-		this.line_plot_area = new PlotArea('line_plot_area', new R(0.1,0.1,0.8,0.8))
-		this.line_data_area = new DataArea('line_data_area')
+class LinePlot extends PlotArea{
+	constructor({
+			label,
+			ax_labels = ['x-axis', 'y-axis'],
+			ax_extent = E.from(0,1,0,1),
+			p_rect_in_f = new R(0.,0.,1,1),
+			svg_fig = null,
+			
+		}){
+		super(
+			label, 
+			p_rect_in_f
+		)
+		this.line_data_area = new DataArea(
+			'line_data_area', 
+			this.p2f_transform,
+			new R(0.2,0.8,0.6,-0.6),
+			ax_extent,
+			ax_labels
+		)
 		
-		this.line_plot_area.addDataArea(this.line_data_area)
-		this.addPlotArea(this.line_plot_area)
+		this.addDataArea(this.line_data_area)
+		
+		if (svg_fig !== null){
+			this.addToFigure(svg_fig)
+		}
 		
 	}
 }
 
-class LinePlot{
-	constructor(name, parentElement, resizeable=true, extent={xmin:0, ymin: 0, xmax:20, ymax:20}){
-		this.name = name
-		
-		// Sizes of things
-		this.width_of = {
-			x_ax_line:0.2, 
-			y_ax_line:0.2, 
-			x_ax_tick:0.1, 
-			y_ax_tick:0.1,
-			x_ax_ticklabel_text:0.1,
-			y_ax_ticklabel_text:0.1
-		}
-		this.length_of = {
-			x_ax_tick:0.5,
-			y_ax_tick:0.5,
-			x_ax_ticklabels:2,
-			y_ax_ticklabels:2,
-		}
-		this.number_of = {
-			x_ax_ticks:6,
-			y_ax_ticks:6,
-			x_ax_ticks_per_ticklabels:1,
-			y_ax_ticks_per_ticklabels:1,
-		}
-		this.angle_of = {
-			x_ax_ticklabels : 0,
-			y_ax_ticklabels : 0,
-		}
-		this.font_size_of = {
-			x_ax_ticklabels: 1.6, //pixels
-			y_ax_ticklabels: 1.6, //pixels
-		}
-		
-		
-		this.resizeable = resizeable
-		this.data = null
-		
-		// Transforms
-		this.d2w_transform = null // transforms data coords to window coords so we can draw them
-		
-		// Window attributes
-		this.w_rect = {x:-1, y:-1, w:14, h:14}
-		
-		// Axis attributes
-		this.ax_rect = {x:0, y:0, w:10, h:10}
-		this.ax_extent = extent
-		this.x_ax = null
-		this.y_ax = null
-		this.x_ax_ticks = []
-		this.y_ax_ticks = []
-		this.x_ax_ticklabels = []
-		this.y_ax_ticklabels = []
-		this.x_ax_label = ""
-		this.y_ax_label = ""
-		
-		this.data_extent = {xmin:null, xmax:null, ymin:null, ymax:null}
-		this.last_point = null
-		
-		this.n_data_points = 0
-		this.data = []
-		this.markers = []
-		this.line_segments = []
-		
-		this.auto_resize = {x:true, y:true}
-		
-		
-		// default marker creation function
-		this.createMarker = (x,y)=>{return createSvgElement("circle", {cx:x, cy:y, r:0.5})}
-		
-		
-		this.svg = createSvgElement('svg', {
-			width:"200px", // width of svg element
-			height:"200px", // height of svg element
-		})
-		this.update_viewbox()
-		this.plot_area = createSvgElement("g")
-		this.calculate_d2w_transform()
-		this.apply_d2w_transform()
-		
-		
-		this.create_axes()
-		
-		
-		
-		
-		//this.svg.append(this.circle_1, this.circle_2)
-		this.svg.appendChild(this.plot_area)
-		parentElement.appendChild(this.svg)
-		
-		// testing
-		//this.circle_1 = createSvgElement('circle', {cx:"50", cy:"50", r:"50"})
-		//this.circle_2 = createSvgElement('circle', {cx:"180", cy:"80", r:"20"})
-		
-		//this.draw_point(0,0)
-		//this.draw_point(5,10)
-		
-	}
-	
-	calculate_d2w_transform(){
-		// scalex, skewx, skewy, scaley, transposex, transposey
-		let scale_x = this.ax_rect.w/(this.ax_extent.xmax-this.ax_extent.xmin)
-		let scale_y = -1*this.ax_rect.h/(this.ax_extent.ymax-this.ax_extent.ymin)
-		let skew_x = 0
-		let skew_y = 0
-		let trans_x = this.ax_rect.x
-		let trans_y = this.ax_rect.h - this.ax_rect.y
-		this.d2w_transform = `matrix( ${scale_x} ${skew_x} ${skew_y} ${scale_y} ${trans_x} ${trans_y})`
-	}
-	
-	apply_d2w_transform(){
-		this.plot_area.setAttribute("transform", this.d2w_transform)
-	}
-	
-	use_d2w_transform(x,y){
-		let scale_x = this.ax_rect.w/(this.ax_extent.xmax-this.ax_extent.xmin)
-		let scale_y = -1*this.ax_rect.h/(this.ax_extent.ymax-this.ax_extent.ymin)
-		let skew_x = 0
-		let skew_y = 0
-		let trans_x = this.ax_rect.x
-		let trans_y = this.ax_rect.h - this.ax_rect.y
-		return [x*scale_x + trans_x, y*scale_y + trans_y]
-	}
-	
-	update_viewbox(){
-		this.svg.setAttribute("viewBox", `${this.w_rect.x} ${this.w_rect.y} ${this.w_rect.w} ${this.w_rect.h}`)
-	}
-	
-	set_extent(xmin, xmax, ymin, ymax){
-		this.ax_extent = {xmin:xmin, xmax:xmax, ymin:ymin, ymax:ymax}
-	}
-	
-	create_axes_lines(){
-		this.x_ax = createSvgElement("line", {x1:this.ax_extent.xmin, y1:this.ax_extent.ymin, x2:this.ax_extent.xmax, y2:this.ax_extent.ymin})
-		this.y_ax = createSvgElement("line", {x1:this.ax_extent.xmin, y1:this.ax_extent.ymin, x2:this.ax_extent.xmin, y2:this.ax_extent.ymax})
-		this.plot_area.append(this.x_ax, this.y_ax)
-	}
-	update_axes_lines_style(){
-		setAttrsFor(this.x_ax, {stroke:"black", "stroke-width":this.width_of.x_ax_line})
-		setAttrsFor(this.y_ax, {stroke:"black", "stroke-width":this.width_of.y_ax_line})
-	}
-	update_axes_lines(){
-		setAttrsFor(this.x_ax, {x1:this.ax_extent.xmin, y1:this.ax_extent.ymin, x2:this.ax_extent.xmax, y2:this.ax_extent.ymin})
-		setAttrsFor(this.y_ax, {x1:this.ax_extent.xmin, y1:this.ax_extent.ymin, x2:this.ax_extent.xmin, y2:this.ax_extent.ymax})
-	}
-	
-	create_axes_ticks(){
-		let i=0
-		for(i=0;i<this.number_of.x_ax_ticks;++i){
-			this.x_ax_ticks.push(createSvgElement("line"))
-		}
-		for(i=0;i<this.number_of.y_ax_ticks;++i){
-			this.y_ax_ticks.push(createSvgElement("line"))
-		}
-		this.plot_area.append(...this.x_ax_ticks, ...this.y_ax_ticks)
-	}
-	update_axes_ticks(){
-		// have to subtract 1 as we are starting at zero and going to end of the line
-		let x_tick_step = (this.ax_extent.xmax-this.ax_extent.xmin)/(this.number_of.x_ax_ticks-1)
-		let y_tick_step = (this.ax_extent.ymax-this.ax_extent.ymin)/(this.number_of.y_ax_ticks-1)
-		for (const [i, tick] of this.x_ax_ticks.entries()){
-			setAttrsFor(tick, {
-				x1:this.ax_extent.xmin+i*x_tick_step,
-				x2:this.ax_extent.xmin+i*x_tick_step,
-				y1:this.ax_extent.ymin,
-				y2:this.ax_extent.ymin-this.length_of.x_ax_tick,
-			})
-		}
-		for(const [i,tick] of this.y_ax_ticks.entries()){
-			setAttrsFor(tick, {
-				x1:this.ax_extent.xmin-this.length_of.y_ax_tick,
-				x2:this.ax_extent.xmin,
-				y1:this.ax_extent.ymin+i*y_tick_step,
-				y2:this.ax_extent.ymin+i*y_tick_step,
-			})
-		}
-	}
-	update_axes_ticks_style(){
-		for(const tick of this.x_ax_ticks){
-			setAttrsFor(tick, {stroke:"black", "stroke-width":this.width_of.x_ax_tick})
-		}
-		for(const tick of this.y_ax_ticks){
-			setAttrsFor(tick, {stroke:"black", "stroke-width":this.width_of.y_ax_tick})
-		}
-	}
-	
-	create_axes_ticklabels(){
-		let i=0
-		for(i=0;i<this.number_of.x_ax_ticks;++i){
-			if(i%this.number_of.x_ax_ticks_per_ticklabels == 0){
-				this.x_ax_ticklabels.push(createSvgElement("text"))
-			}
-		}
-		for(i=0;i<this.number_of.y_ax_ticks;++i){
-			if(i%this.number_of.y_ax_ticks_per_ticklabels == 0){
-				this.y_ax_ticklabels.push(createSvgElement("text"))
-			}
-		}
-		this.svg.append(...this.x_ax_ticklabels, ...this.y_ax_ticklabels)
-	}
-	update_axes_ticklabels(){
-		// have to subtract 1 as we are starting at zero and going to end of the line
-		let x_tick_step = (this.ax_extent.xmax-this.ax_extent.xmin)/(this.number_of.x_ax_ticks-1)
-		let y_tick_step = (this.ax_extent.ymax-this.ax_extent.ymin)/(this.number_of.y_ax_ticks-1)
-		
-		let x=0
-		let y=0
-		let tl = 0
-		
-		let j=0
-		for (const [i, tick] of this.x_ax_ticks.entries()){
-			if((i%this.number_of.x_ax_ticks_per_ticklabels) == 0){
-				[x,y] = this.use_d2w_transform(
-					this.ax_extent.xmin + i*x_tick_step - 0.5*this.length_of.x_ax_ticklabels, 
-					this.ax_extent.ymin - 5*this.length_of.x_ax_tick
-				)
-				
-				setAttrsFor(this.x_ax_ticklabels[j], {
-					x:x,
-					y:y,
-					textLength: this.use_d2w_transform(this.length_of.x_ax_ticklabels,0)[0],
-				})
-				this.x_ax_ticklabels[j].textContent = (this.ax_extent.xmin + i*x_tick_step).toString()
-				j++
-			}
-		}
-		j=0
-		for(const [i,tick] of this.y_ax_ticks.entries()){
-			if((i%this.number_of.y_ax_ticks_per_ticklabels) == 0){
-				[x,y] = this.use_d2w_transform(
-					this.ax_extent.xmin - 2*this.length_of.y_ax_tick - this.length_of.y_ax_ticklabels, 
-					this.ax_extent.ymin + i*y_tick_step
-				)
-				setAttrsFor(this.y_ax_ticklabels[j], {
-					x:x,
-					y:y,
-					textLength: this.use_d2w_transform(this.length_of.y_ax_ticklabels,0)[0],
-				})
-				this.y_ax_ticklabels[j].textContent = (this.ax_extent.ymin + i*y_tick_step).toString()
-				j++
-			}
-		}
-	}
-	update_axes_ticklabels_style(){
-		for(const label of this.x_ax_ticklabels){
-			setAttrsFor(label, {
-				stroke:"black", 
-				"stroke-width":this.width_of.x_ax_ticklabel_text,
-				"style":`font: normal ${this.font_size_of.x_ax_ticklabels/(this.use_d2w_transform(1,0)[0])}px sans-serif`,
-			})
-		}
-		for(const label of this.y_ax_ticklabels){
-			setAttrsFor(label, {
-				stroke:"black", 
-				"stroke-width":this.width_of.y_ax_ticklabel_text,
-				"style":`font: normal ${this.font_size_of.y_ax_ticklabels/(this.use_d2w_transform(1,0)[0])}px sans-serif`,
-			})
-		}
-	}
-	
-	create_axes(){
-		this.create_axes_lines()
-		this.create_axes_ticks()
-		this.create_axes_ticklabels()
-		this.update_axes()
-		this.update_axes_style()
-	}
-	
-	update_axes(){
-		this.update_axes_lines()
-		this.update_axes_ticks()
-		this.update_axes_ticklabels()
-	}
-	
-	update_axes_style(){
-		this.update_axes_lines_style()
-		this.update_axes_ticks_style()
-		this.update_axes_ticklabels_style()
-	}
-	
-	
-	
-	is_point_within_axes(x,y){
-		return ((this.ax_extent.xmin<x) && (this.ax_extent.xmax>x) && (this.ax_extent.ymin<y) && (this.ax_extent.ymax >y))
-	}
-	
-	set_marker(function_to_create_marker_at_pos){
-		this.createMarker = function_to_create_marker_at_pos
-	}
-	
-	update_data_extent(x,y){
-		let changed = false
-		if (this.data_extent.xmin === null || x < this.data_extent.xmin){
-			this.data_extent.xmin = x
-			changed = true
-		}
-		if (this.data_extent.xmax === null || x > this.data_extent.xmax){
-			this.data_extent.xmax = x
-			changed = true
-		}
-		if (this.data_extent.ymin === null || y < this.data_extent.ymin){
-			this.data_extent.ymin = y
-			changed = true
-		}
-		if (this.data_extent.ymax === null || y > this.data_extent.ymax){
-			this.data_extent.ymax = y
-			changed = true
-		}
-		return changed
-	}
-	
-	do_auto_resize(){
-		changed = false
-		if (this.auto_resize.x){
-			if(this.data_extent.xmin < this.extent.xmin){
-				this.extent.xmin = this.data_extent.xmin
-				changed = true
-			}
-			if(this.data_extent.xmax > this.extent.xmax){
-				this.extent.xmax = this.data_extent.xmax
-				changed = true
-			}
-		}
-		if (this.auto_resize.y){
-			if(this.data_extent.ymin < this.extent.ymin){
-				this.extent.ymin = this.data_extent.ymin
-				changed = true
-			}
-			if(this.data_extent.ymax > this.extent.ymax){
-				this.extent.ymax = this.data_extent.ymax
-				changed = true
-			}
-		}
-		return changed
-	}
-	
-	draw_point(x, y){
-		console.log("drawing point", x, y)
-		let should_update_axes = false
-		
-		let mkr = this.createMarker(x,y)
-		this.plot_area.appendChild(mkr)
-		this.markers.push(mkr)
-		this.last_point = [x,y]
-		this.data.push(this.last_point)
-		
-		should_update_axes ||= this.update_data_extent(x,y)
-		if ((this.n_data_points < 2) || !this.is_point_within_axes(x,y) ){
-			should_update_axes ||= this.do_auto_resize()
-		}
-		
-		if(should_update_axes){
-			this.update_axes()
-		}
-		
+class LogLinePlot extends LinePlot{
+	add_data_point(...args){
+		this.current_data_area.add_data_point(args[0], Math.log10(args[1]))
 	}
 }

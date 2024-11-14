@@ -162,8 +162,12 @@ class Control{
 		this.deserialiser = deserialiser
 	}
 	
-	addEventListener(...args){
-		return this.input_element.addEventListener(...args)
+	addEventListener(type, listener, ...args){
+		return this.input_element.addEventListener(type, listener, ...args)
+	}
+	
+	dispatchEvent(event){
+		return this.input_element.dispatchEvent(event)
 	}
 	
 	getValue(){
@@ -266,14 +270,62 @@ class ControlManager{
 }
 
 class CleanModifiedParameters{
-	static n_iter = new Parameter('n_iter', 'Maximum number of iterations to perform', 'integer', Number, 10)
-	static adaptive_threshold_flag = new Parameter("adaptive_threshold_flag", "If true, will apply heuteristics to find the optimal threshold at each iteration and not rely upon a manually set threshold", "bool", Boolean, false)
-	static threshold = new Parameter('threshold', "Fraction of the residual's brightest pixel, above which a pixel will be selected as a 'source pixel'", "real(0,1)", Number, 0.3)
-	static loop_gain = new Parameter("loop_gain", "What fraction of a selected pixel is treated as a 'source' each iteration", "real(0,1)", Number, 0.1)
-	static rms_frac_threshold = new Parameter("rms_frac_threshold", "When the root-mean-square of the residual is below this fraction of it's original value, iteration will stop", "real(0,1)", Number, 1E-2)
-	static fabs_frac_threshold = new Parameter("fabs_frac_threshold", "When the brightest pixel of the residual is below this fraction of it's original value, iteration will stop", "real(0,1)", Number, 1E-2) 
-	static clean_beam_sigma = new Parameter("clean_beam_sigma", "The standard deviation (in pixels) of the 'clean beam' to convolve source components with, forming the 'clean map'. If zero, no clean beam  is used", "real", Number, 0)
-	static add_residual_flag = new Parameter("add_residual_flag", "If true, will add the residual to the clean map after convolution with the cleam beam (if requested)", "bool", Boolean, false) 
+	static n_iter = new Parameter(
+		'n_iter', 
+		'Maximum number of iterations to perform. A good starting number is 100', 
+		'integer', 
+		Number, 
+		10
+	)
+	static adaptive_threshold_flag = new Parameter(
+		"adaptive_threshold_flag", 
+		"If true, will apply heuteristics to find the optimal threshold at each iteration and not rely upon a manually set threshold", 
+		"bool", 
+		Boolean, 
+		true
+	)
+	static threshold = new Parameter(
+		'threshold', 
+		"Fraction of the residual's brightest pixel, above which a pixel will be selected as a 'source pixel'. Must be in the range (0,1).", 
+		"real(0,1)", 
+		Number, 
+		0.3
+	)
+	static loop_gain = new Parameter(
+		"loop_gain", 
+		"What fraction of a selected pixel is treated as a 'source' each iteration. Must be in the range (0,1).", 
+		"real(0,1)", 
+		Number, 
+		0.1
+	)
+	static rms_frac_threshold = new Parameter(
+		"rms_frac_threshold", 
+		"When the root-mean-square of the residual is below this fraction of it's original value, iteration will stop. Must be in the range (0,1).", 
+		"real(0,1)", 
+		Number, 
+		1E-2
+	)
+	static fabs_frac_threshold = new Parameter(
+		"fabs_frac_threshold", 
+		"When the brightest pixel of the residual is below this fraction of it's original value, iteration will stop. Must be in the range (0,1).", 
+		"real(0,1)", 
+		Number, 
+		1E-2
+	) 
+	static clean_beam_sigma = new Parameter(
+		"clean_beam_sigma", 
+		"The standard deviation (in pixels) of the gaussian 'clean beam' to convolve source components with, forming the 'clean map'. If zero, no clean beam is used", 
+		"real", 
+		Number, 
+		0
+	)
+	static add_residual_flag = new Parameter(
+		"add_residual_flag", 
+		"If true, will add the residual to the clean map after convolution with the cleam beam (if requested)", 
+		"bool", 
+		Boolean, 
+		false
+	) 
 	
 	constructor(parent_element){
 		this.ctl_container = ControlManager.create_container({class:"param-container"})
@@ -303,15 +355,17 @@ class CleanModifiedParameters{
 			this.add_residual_flag_ctl.html_container
 		)
 		
+		// Add event listeners here
 		
 		this.adaptive_threshold_flag_ctl.addEventListener("change", (e)=>{
-				console.log(e.target)
+				//console.log("CleanModifiedParameters::EventListener::change", e.target)
 				this.threshold_ctl.input_element.disabled = e.target.checked
-				console.log(this.threshold_ctl.input_element)
+				//console.log(this.threshold_ctl.input_element)
 			}
 		)
 		
-		
+		// want to run this on initialisation as well as when control is changed
+		this.adaptive_threshold_flag_ctl.dispatchEvent(new Event("change"))
 		
 		parent_element.appendChild(this.ctl_container)
 	}

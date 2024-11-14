@@ -50,7 +50,7 @@ EM_JS(void, js_plot_point, (const char* name, double x, double y), {
 		console.log(plot_name_map);
 		return;
 	}
-	plot_name_map.get(name).draw_point(x,y);
+	plot_name_map.get(name).add_data_point(x,y);
 });
 
 // TODO: 
@@ -344,7 +344,8 @@ void CleanModifiedAlgorithm::doIter(
 	// magic values here for now
 	//update_js_plot("fabs_record", fabs_record.data(), fabs_record.size());
 	js_plot_point("fabs_record", i, fabs_record[i]);
-	//update_js_plot("rms_record", rms_record.data(), rms_record.size());
+	js_plot_point("rms_record", i, rms_record[i]);
+	js_plot_point("threshold_record", i, threshold_record[i]);
 	//update_js_plot("threshold_record", threshold_record.data(), threshold_record.size());
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
