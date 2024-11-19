@@ -2,6 +2,10 @@
 
 //import ImageHolder from "./image_holder.js"
 
+let deconv_type = "clean_modified"
+let deconv_name = "test_deconvolver"
+let deconv_complete = false
+
 let scratch_canvas = document.getElementById("canvas")
 let scratch_canvas_ctx = scratch_canvas.getContext("2d")
 scratch_canvas_ctx.imageSmoothingEnabled = false // NOTE: this needs to be set after each canvas resize
@@ -13,6 +17,9 @@ let sci_canvas = document.getElementById("sci_canvas")
 let psf_canvas = document.getElementById("psf_canvas")
 let clean_map_canvas = document.getElementById("clean_map_canvas")
 let residual_canvas = document.getElementById("residual_canvas")
+
+let download_clean_map_button = document.getElementById("download-clean-map-button")
+let download_residual_button = document.getElementById("download-residual-button")
 
 let run_deconv_button = document.getElementById("run_deconv")
 let n_max_iter_field = document.getElementById("n_max_iter")
@@ -32,6 +39,29 @@ let svg_figure = new SvgFig(
 )
 let plot_name_map = new Map();
 
+/*
+const std::string& deconv_type, 
+		const std::string& deconv_name, 
+		const std::string& file_id,
+		const std::string& original_file_name
+*/
+download_clean_map_button.addEventListener(
+	"click",
+	new WasmDataDownloader( 
+		"clean_map.tiff", 
+		"deconv.clean_map", 
+		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
+	)
+)
+
+download_residual_button.addEventListener(
+	"click",
+	new WasmDataDownloader( 
+		"residual.tiff", 
+		"deconv.residual", 
+		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
+	)
+)
 
 
 
@@ -74,9 +104,8 @@ run_deconv_button.addEventListener("click", async (e)=>{
 			return
 		}
 
-		let deconv_type = "clean_modified"
-		let deconv_name = "test_deconvolver"
-
+		
+		deconv_complete = false
 		console.log("Creating deconvolver")
 		//let n_max_iter = parseInt(n_max_iter_field.value, 10)
 		
@@ -108,6 +137,7 @@ run_deconv_button.addEventListener("click", async (e)=>{
 
 		console.log("Running deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
 		await Module.run_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")
+		deconv_complete = true
 		
 		let width = sci_image_holder.im_w
 		let height = sci_image_holder.im_h

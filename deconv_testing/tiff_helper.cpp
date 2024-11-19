@@ -2,9 +2,95 @@
 
 
 
+TIFF_TileInfo::TIFF_TileInfo(TIFF* tptr){
+	GET_LOGGER;
+	n_tiles = TIFFNumberOfTiles(tptr);
+	tile_size = TIFFTileSize(tptr);
+	if (! TIFFGetField(tptr, TIFFTAG_TILELENGTH, &rows_per_tile)){
+		LOG_ERROR("Could not determine rows_per_tile for TIFF file. Exiting...");
+		std::exit(EXIT_FAILURE);
+	}
+}
+
+TIFF_StripInfo::TIFF_StripInfo(TIFF* tptr){
+	GET_LOGGER;
+	n_strips = TIFFNumberOfStrips(tptr);
+	strip_size = TIFFStripSize(tptr);
+	if (! TIFFGetField(tptr, TIFFTAG_ROWSPERSTRIP, &rows_per_strip)){
+		LOG_ERROR("Could not determine rows_per_strip for TIFF file. Exiting...");
+		std::exit(EXIT_FAILURE);
+	}
+}
+
+void TIFF_LayoutInfo::fill_from(const TIFF_StripInfo& other){
+	n_items = other.n_strips;
+	item_size = other.strip_size;
+	rows_per_item = other.rows_per_strip;
+}
+void TIFF_LayoutInfo::fill_from(const TIFF_TileInfo& other){
+	n_items = other.n_tiles;
+	item_size = other.tile_size;
+	rows_per_item = other.rows_per_tile;
+}
+
+TIFF_PixelInfo::TIFF_PixelInfo(TIFF* tptr){
+	GET_LOGGER;
+	if (! TIFFGetField(tptr, TIFFTAG_PLANARCONFIG, &planar_config)){
+		LOG_ERROR("Could not determine planar configuration for TIFF file. Exiting...");
+		std::exit(EXIT_FAILURE);
+	}
+	
+	if (! TIFFGetField(tptr, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel)){
+		LOG_WARN("Could not determine samples_per_pixel for TIFF file. Assuming 1");
+		samples_per_pixel = 1;
+	}
+	
+	uses_strips = TIFF_uses_strips(tptr);
+	uses_tiles = TIFF_uses_tiles(tptr);
+	
+	bits_per_sample.resize(samples_per_pixel);
+	sample_format.resize(samples_per_pixel);
+	min_sample_value.resize(samples_per_pixel);
+	max_sample_value.resize(samples_per_pixel);
+	
+	if (! TIFFGetField(tptr, TIFFTAG_BITSPERSAMPLE, bits_per_sample.data())){
+		LOG_ERROR("Could not determine bits per sample for TIFF file. Exiting...");
+		std::exit(EXIT_FAILURE);
+	}
+	if (! TIFFGetField(tptr, TIFFTAG_SAMPLEFORMAT, sample_format.data())){
+		LOG_ERROR("Could not determine sample_format for TIFF file. Exiting...");
+		std::exit(EXIT_FAILURE);
+	}
+	if (! TIFFGetField(tptr, TIFFTAG_SMINSAMPLEVALUE, min_sample_value.data())){
+		LOG_WARN("Could not determine min_sample_value for TIFF file");
+		for (int i=0; i< samples_per_pixel; ++i){
+			min_sample_value[i] = 0;
+		}
+	}
+	if (! TIFFGetField(tptr, TIFFTAG_SMAXSAMPLEVALUE, max_sample_value.data())){
+		LOG_WARN("Could not determine max_sample_value for TIFF file");
+		for (int i=0; i< samples_per_pixel; ++i){
+			max_sample_value[i] = 1;
+		}
+	}
+}
+
+
+TIFF_ImageShape::TIFF_ImageShape(TIFF* tptr){
+	width = TIFF_width(tptr);
+	height = TIFF_height(tptr);
+}
+
 uint16_t TIFF_get_width(const std::string& name){
 	GET_LOGGER;
-	TIFF* tptr = MemFileRegistry_get<TIFF>(name);
+	
+	TIFF* tptr = TIFF_open(name, "rm");
+	
+	if (tptr == nullptr){
+		LOG_ERROR("Could not open TIFF file %", name);
+		exit(EXIT_FAILURE);
+	}
+	
 	uint16_t image_width;
 	if (! TIFFGetField(tptr, TIFFTAG_IMAGEWIDTH, &image_width)){
 		LOG_WARN("Could not determineimage_width for TIFF file. Exiting...");
@@ -15,7 +101,7 @@ uint16_t TIFF_get_width(const std::string& name){
 
 uint16_t TIFF_get_height(const std::string& name){
 	GET_LOGGER;
-	TIFF* tptr = MemFileRegistry_get<TIFF>(name);
+	TIFF* tptr = TIFF_open(name, "rm");
 	uint16_t ret;
 	if (! TIFFGetField(tptr, TIFFTAG_IMAGELENGTH, &ret)){
 		LOG_WARN("Could not determine image length for TIFF file. Exiting...");
@@ -182,29 +268,44 @@ std::vector<double> TIFF_read_strips(TIFF* tptr){
 // May have to write our own class that sits on top of libtiff and intelligently finds the
 // number of bytes per sample, samples per pixel, and dumps uncompressed raw image data into memory.
 
+const std::string OPEN_FILE_TAG="__open_copy";
 
-std::string TIFF_from_js_array(const std::string& name, const emscripten::val& uint8_array){
+TIFF* TIFF_open(const std::string& name, const char* mode){
 	GET_LOGGER;
-
-	std::vector<uint8_t> raw_data = emscripten::convertJSArrayToNumberVector<uint8_t>(uint8_array);
+	LOG_DEBUG("Opening TIFF file %", name);
+	
+	// ERROR: Calling TIFFClose(...) in any form invalidates the data we "stored on disk"
+	// Therefore, need to always copy when opening
+	
+	std::vector<std::byte> persistent_data = Storage::BlobMgr::get(name);
+	LOGV_DEBUG(&persistent_data);
+	LOGV_DEBUG(persistent_data);
+	
+	Storage::BlobMgr::store_named(name+OPEN_FILE_TAG, persistent_data);
+	
+	std::vector<std::byte>& raw_data = Storage::BlobMgr::get(name+OPEN_FILE_TAG);
+	
+	LOGV_DEBUG(&raw_data);
 	LOGV_DEBUG(raw_data);
-
-	std::byte* ptr =reinterpret_cast<std::byte*>(malloc(sizeof(uint8_t)*raw_data.size()));
-	std::copy(reinterpret_cast<std::byte*>(raw_data.data()), reinterpret_cast<std::byte*>(raw_data.data()+raw_data.size()), ptr);
-
-	FileLike* tiff_data = new FileLike(
-		std::span<std::byte>(ptr, sizeof(uint8_t)*raw_data.size())
-	);
-
-	LOGV_DEBUG(tiff_data->bytes);
-
-	if (MemFileRegistry.contains(name)){
-		MemFileRegistry_delete(name);
+	
+	if (Storage::filelikes.contains(name)) {
+		Storage::filelikes[name].bytes = std::span<std::byte>(raw_data.begin(), raw_data.end());
 	}
+	else {
+		Storage::filelikes.emplace(
+			name,
+			FileLike(
+				std::span<std::byte>(raw_data.begin(), raw_data.end())
+			)
+		);
+	}
+	FileLike* tiff_data = &(Storage::filelikes[name]);
+	LOGV_DEBUG(tiff_data);
+	LOGV_DEBUG(tiff_data->bytes);
 	
 	TIFF* tptr = TIFFClientOpen(
 		name.c_str(), 
-		"rm", // r - read, m - don't memory map file
+		mode, // r - read, m - don't memory map file
 		(thandle_t)(tiff_data),
 		FileLike::readproc,
 		FileLike::writeproc,
@@ -214,12 +315,84 @@ std::string TIFF_from_js_array(const std::string& name, const emscripten::val& u
 		FileLike::mapfileproc,
 		FileLike::unmapfileproc
 	);
-
-
+	
+	LOGV_DEBUG(tptr);
+	
+	if (tptr == nullptr){
+		LOG_ERROR("Could not open TIFF file %", name);
+		exit(EXIT_FAILURE);
+	}
+	
+	if (MemFileRegistry.contains(name)){
+		LOG_ERROR("TIFF file '%' is already open, cannot open twice", name);
+	}
+	
 	MemFileRegistry[name] = FPtr(
 		FileType::TIFF,
 		tptr
 	);
+	
+	LOGV_DEBUG(raw_data);
+	LOGV_DEBUG(tiff_data->bytes);
+	return tptr;
+}
+
+void TIFF_close(const std::string& name){
+	GET_LOGGER;
+	LOG_DEBUG("Closing TIFF file %", name);
+	
+	// ERROR: Calling TIFFClose(...) in any form invalidates the data we "stored on disk"
+	// Therefore, need to always copy when opening
+	
+	
+	
+	if (MemFileRegistry.contains(name)){
+		// Write the 'copy' to disk
+		Storage::BlobMgr::store_named(name, Storage::BlobMgr::get(name+OPEN_FILE_TAG));
+	
+		LOG_DEBUG("MemFileRegistry contains file");
+		TIFF* tptr = MemFileRegistry_get<TIFF>(name);
+		LOG_DEBUG("Got pointer from MemFileRegistry");
+		// File is closed when MemFileRegistry entry is deleted
+		//TIFFClose(tptr);
+		//LOG_DEBUG("Closed TIFF file via library function");
+		MemFileRegistry_delete(name);
+		
+		LOG_DEBUG("MemFileRegistry entry deleted");
+		//Storage::blobs.erase(Storage::blob_name_to_id_map[name+OPEN_FILE_TAG]);
+		//LOG_DEBUG("Erased copied storage");
+		//Storage::blob_name_to_id_map.erase(name+OPEN_FILE_TAG);
+		//LOG_DEBUG("Erased name to id mapping");
+	}
+	LOG_DEBUG("TIFF file closed");
+}
+
+std::string TIFF_from_js_array(const std::string& name, const emscripten::val& uint8_array){
+	GET_LOGGER;
+
+	// Store the raw TIFF data in a blob so we can access it later
+	if (!Storage::BlobMgr::has(name)){
+		Storage::BlobMgr::store_named(name, emscripten::convertJSArrayToNumberVector<uint8_t>(uint8_array));
+	}
+	
+	std::vector<std::byte>* raw_data_ptr;
+	
+	TIFF* tptr = TIFF_open(name, "rm");
+	raw_data_ptr = &(Storage::BlobMgr::get(name));
+	LOGV_DEBUG(raw_data_ptr);
+	LOGV_DEBUG(*raw_data_ptr);
+	
+	TIFF_close(name); // ERROR: For some reason this changes the stored data
+	raw_data_ptr = &(Storage::BlobMgr::get(name));
+	LOGV_DEBUG(raw_data_ptr);
+	LOGV_DEBUG(*raw_data_ptr);
+	
+	tptr = TIFF_open(name, "rm");
+	raw_data_ptr = &(Storage::BlobMgr::get(name));
+	LOGV_DEBUG(raw_data_ptr);
+	LOGV_DEBUG(*raw_data_ptr);
+	
+	
 
 	LOG_DEBUG("File % read in successfully", name);
 
@@ -238,6 +411,8 @@ std::string TIFF_from_js_array(const std::string& name, const emscripten::val& u
 			GreyscalePixelFormat // Hard-coded for now	
 		)
 	));
+
+	TIFF_close(name);
 
 	LOG_DEBUG("Stored image using name '%'", name);
 

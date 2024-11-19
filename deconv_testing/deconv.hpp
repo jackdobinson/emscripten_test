@@ -48,11 +48,12 @@ struct ParameterInformation{
 class CleanModifiedAlgorithm {
 	public:
 
-	
+	// Where to store results
 	Storage::blob_id_t BLOB_ID_COMPONENTS=Storage::BlobMgr::get_free_id();
 	Storage::blob_id_t BLOB_ID_CLEAN_MAP=Storage::BlobMgr::get_free_id();
 	Storage::blob_id_t BLOB_ID_RESIDUAL=Storage::BlobMgr::get_free_id();
 
+	// deconvolution parameters
 	size_t n_iter;
 	size_t n_positive_iter;
 	double loop_gain;
@@ -62,6 +63,8 @@ class CleanModifiedAlgorithm {
 	double noise_std;
 	double rms_frac_threshold;
 	double fabs_frac_threshold;
+	
+	// Input data parameters
 	size_t data_size;
 	std::vector<size_t> data_shape;
 	std::vector<double> residual_data;
@@ -69,6 +72,8 @@ class CleanModifiedAlgorithm {
 	std::vector<double> clean_map;
 	std::vector<bool> px_choice_map;
 
+	// Internal state
+	std::vector<int> data_shape_adjustment;
 	double px_threshold;
 	std::vector<double> padded_psf_data;
 	std::vector<double> selected_pixels;

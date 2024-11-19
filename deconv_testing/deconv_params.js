@@ -24,6 +24,12 @@ function assert_not_null(obj){
 	assert(obj!==null, "object cannot be null")
 }
 
+function assert_all_defined(...args){
+	for(const [i,item] of args.entries()){
+		assert(item !== undefined, `${i}th object was undefined`)
+	}
+}
+
 function when_null(obj, value){
 	if(!not_null(obj)){
 		return value

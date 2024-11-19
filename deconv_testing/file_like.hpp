@@ -6,6 +6,14 @@
 /*
  * Defines an object that can be used like a file but operates in memory
 */
+
+const uint64_t KiloByte = 2ULL<<10;
+const uint64_t MegaByte = 2ULL<<20;
+const uint64_t GigaByte = 2ULL<<30;
+const uint64_t TeraByte = 2ULL<<40;
+const uint64_t PetaByte = 2ULL<<50;
+const uint64_t ExaByte  = 2ULL<<60;
+
 struct FileLike{
 	std::span<std::byte> bytes;
 	size_t pos = 0;
@@ -27,8 +35,26 @@ struct FileLike{
 	template<class PTR, class BUF, class SIZE>
 	static SIZE writeproc(PTR fptr, BUF buf, SIZE size){
 		GET_LOGGER;
-		LOG_WARN("Writing to file not supported");
-		return -1;
+		
+		FileLike& mc = *((FileLike*)(fptr)); // cast pointer as a filelike
+		std::byte* bbuf = (std::byte*)(buf); // cast the buffer as a string of bytes
+		
+		size_t i=0; // index of current buffer byte
+		size_t j=mc.pos; // index of current file byte
+		
+		if (mc.pos + size > mc.bytes.size()){
+			LOG_ERROR(
+				"Cannot write past end of span for filelike object. Holder size is %, want to write % bytes from location % to location %.", 
+				mc.bytes.size(), size, mc.pos, mc.pos+size
+			);
+			return -1;
+		}
+		
+		for(i=0; i<size; ++i,++j){
+			mc.bytes[j] = bbuf[i];
+		}
+		mc.pos += i;
+		return i;
 	}
 
 	template<class PTR, class OFFSET>
@@ -65,12 +91,14 @@ struct FileLike{
 
 	template<class PTR>
 	static int closeproc(PTR fptr){
+		// NOTE: I think this might be causing some problems
+		
 		//GET_LOGGER;
 		//LOG_DEBUG("Closing file %", fptr);
 		FileLike* mc = (FileLike*)fptr;
 		// NOTE: because of the peculiar way that emscripten passes chunks of memory to the program, should free
 		// the bytes here, then delete the memory chunk.
-		free (mc->bytes.data());
+		//free (mc->bytes.data);
 		delete mc;
 		return 0;
 	}

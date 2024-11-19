@@ -209,7 +209,32 @@ emscripten::val get_deconvolver_residual(
 	return vector_as_JSImageData(deconvolver.BLOB_ID_RESIDUAL, deconvolver.residual_data);
 }
 
+// TODO: For some reason, output TIFF images are slanted. 
+// So are inputs if we re-use the image instead of uploading a new one.
+emscripten::val get_tiff(
+		const std::string& deconv_type, 
+		const std::string& deconv_name, 
+		const std::string& file_id,
+		const std::string& original_file_name
+	){
+	
+	// Only one deconvolver type right now, therefore skip deconv_type dispatch
+	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	std::vector<size_t> raw_data_shape = du::add(deconv.data_shape, deconv.data_shape_adjustment);
+	std::vector<double> raw_data(du::product(raw_data_shape));
+	
+	if (file_id == "deconv.clean_map"){
+		raw_data = du::reshape(deconv.clean_map, deconv.data_shape, raw_data_shape); 
+	}
+	if (file_id == "deconv.residual"){
+		raw_data = du::reshape(deconv.residual_data, deconv.data_shape, raw_data_shape); 
+	}
 
+	const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, raw_data);
+	
+	return emscripten::val(emscripten::typed_memory_view(tiff_data.size(), tiff_data.data()));
+
+}
 
 
 
@@ -312,6 +337,7 @@ void set_deconvolver_parameters(
 
 
 EMSCRIPTEN_BINDINGS(my_module){
+	function("get_tiff", &get_tiff);
 	function("create_deconvolver", &create_deconvolver);
 	function("run_deconvolver", &run_deconvolver);
 	function("get_deconvolver_clean_map", &get_deconvolver_clean_map);

@@ -11,7 +11,13 @@ T round_to(double v){
 }
 
 template<class T>
-T stretch_range(T val, T old_min, T old_max, T new_min, T new_max){
+T stretch_range(
+		T val, 
+		T old_min, 
+		T old_max, 
+		T new_min, 
+		T new_max
+	){
 	return ((val - old_min)/(old_max-old_min))*(new_max - new_min) + new_min;
 }
 
@@ -19,7 +25,11 @@ T stretch_range(T val, T old_min, T old_max, T new_min, T new_max){
 
 
 template<class R=std::byte, class T>
-std::span<R> image_as_blob(Storage::blob_id_t blob_id, const std::vector<T>& a, const PixelFormat input_pixel_format=GreyscalePixelFormat){
+std::span<R> image_as_blob(
+		Storage::blob_id_t blob_id, 
+		const std::vector<T>& a, 
+		const PixelFormat input_pixel_format=GreyscalePixelFormat
+	){
 	GET_LOGGER;
 
 	LOGV_DEBUG(blob_id, a, input_pixel_format.channels_per_pixel);
@@ -76,7 +86,11 @@ std::span<R> image_as_blob(Storage::blob_id_t blob_id, const std::vector<T>& a, 
 
 
 template<class T>
-emscripten::val vector_as_JSImageData(Storage::blob_id_t blob_id, const std::vector<T>& a, const PixelFormat input_pixel_format=GreyscalePixelFormat){
+emscripten::val vector_as_JSImageData(
+		Storage::blob_id_t blob_id, 
+		const std::vector<T>& a, 
+		const PixelFormat input_pixel_format=GreyscalePixelFormat
+	){
 	GET_LOGGER;
 	LOGV_DEBUG(a.data());
 

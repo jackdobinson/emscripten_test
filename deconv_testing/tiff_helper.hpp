@@ -9,10 +9,13 @@
 #include "storage.hpp"
 #include "js_glue.hpp"
 #include "image.hpp"
+#include "data_utils.hpp"
 
 
 // See [this stack overflow answer for how to use TIFFClientOpen](https://stackoverflow.com/a/77007359)
 #define TTAG_STR(TAG) {(TAG), #TAG}
+
+namespace du = data_utils;
 
 uint16_t TIFF_get_width(const std::string& name);
 uint16_t TIFF_get_height(const std::string& name);
@@ -23,6 +26,169 @@ bool TIFF_dump_tags(TIFF* tptr);
 bool TIFF_uses_strips(TIFF* tptr);
 bool TIFF_uses_tiles(TIFF* tptr);
 
+TIFF* TIFF_open(const std::string& name, const char* mode);
+void TIFF_close(const std::string& name);
+
+struct TIFF_TileInfo{
+	size_t n_tiles;
+	size_t tile_size;
+	size_t rows_per_tile;
+	
+	TIFF_TileInfo(TIFF* tptr);
+};
+
+struct TIFF_StripInfo{
+	size_t n_strips;
+	size_t strip_size;
+	size_t rows_per_strip;
+	
+	TIFF_StripInfo(TIFF* tptr);
+};
+
+struct TIFF_LayoutInfo{
+	size_t n_items;
+	size_t item_size;
+	size_t rows_per_item;
+	
+	void fill_from(const TIFF_StripInfo& other);
+	void fill_from(const TIFF_TileInfo& other);
+};
+
+struct TIFF_PixelInfo{
+	uint16_t planar_config;
+	uint16_t samples_per_pixel;
+	
+	bool uses_strips;
+	bool uses_tiles;
+	
+	std::vector<uint16_t> bits_per_sample;
+	std::vector<uint16_t> sample_format;
+	std::vector<double> min_sample_value;
+	std::vector<double> max_sample_value;
+	
+	TIFF_PixelInfo(TIFF* tptr);
+};
+
+struct TIFF_ImageShape{
+	uint16_t width;
+	uint16_t height;
+	
+	TIFF_ImageShape(TIFF* tptr);
+};
+
+std::vector<double> TIFF_read_strips(TIFF* tptr);
+
+std::string TIFF_from_js_array(const std::string& name, const emscripten::val& uint8_array);
+
+
+template<class T>
+std::vector<T> TIFF_doubles_to_samples_as(
+		const TIFF_PixelInfo& pixel_info, 
+		const std::vector<double>& data, // always greyscale, 1 value per pixel
+		double min_pack_value,
+		double max_pack_value
+	){
+	GET_LOGGER;
+	size_t n_samples = pixel_info.samples_per_pixel*data.size();
+	std::vector<T> sample_data(n_samples);
+	
+	LOGV_DEBUG(pixel_info.samples_per_pixel);
+	switch(pixel_info.planar_config){
+		case 1:{ // RGBA RGBA RGBA ...
+			LOG_DEBUG("Planar config = 1");
+			for(size_t i=0; i<n_samples; ++i){
+				sample_data[i] = stretch_range<double>(
+					data[i/pixel_info.samples_per_pixel],
+					pixel_info.min_sample_value[i%pixel_info.samples_per_pixel],
+					pixel_info.max_sample_value[i%pixel_info.samples_per_pixel],
+					min_pack_value,
+					max_pack_value
+				);
+			}
+			break;
+		}
+		case 2: {// R R R R... G G G G... B B B B... A A A A...
+			LOG_DEBUG("Planar config = 2");
+			for(size_t i=0; i<n_samples; ++i){
+				sample_data[i/pixel_info.samples_per_pixel + (i%pixel_info.samples_per_pixel)*data.size()] = stretch_range<double>(
+					data[i/pixel_info.samples_per_pixel],
+					pixel_info.min_sample_value[i%pixel_info.samples_per_pixel],
+					pixel_info.max_sample_value[i%pixel_info.samples_per_pixel],
+					min_pack_value,
+					max_pack_value
+				);
+			}
+			break;
+		}
+		default: {
+			LOG_ERROR("Unknown planar config value '%'", pixel_info.planar_config);
+			exit(EXIT_FAILURE);
+		}
+	}
+	
+	return sample_data;
+}
+
+template<class T>
+void TIFF_write_strips_from(
+		TIFF* tptr,
+		const TIFF_LayoutInfo& layout_info,
+		const std::vector<T>& sample_data
+	){
+	
+	for(size_t i=0; i<layout_info.n_items; ++i){
+		TIFFWriteEncodedStrip(tptr, i, const_cast<void *>(static_cast<const void*>(sample_data.data()+i*layout_info.item_size)), layout_info.item_size);
+	}
+}
+
+template<class T>
+void TIFF_write_strips(
+		TIFF* tptr, 
+		TIFF_LayoutInfo layout_info,
+		TIFF_PixelInfo pixel_info,
+		const std::vector<T>& data // always greyscale, 1 value per pixel
+	){
+	GET_LOGGER;
+	// NOTE: Only greyscale input data is supported
+	
+	switch (pixel_info.sample_format[0]) {
+		case 1:
+			switch (pixel_info.bits_per_sample[0]) {
+				case 8:
+					LOG_DEBUG("Writing Uint8");
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<uint8_t>(pixel_info, data, 0.0, 255.0));
+					break;
+				case 16:
+					LOG_DEBUG("Writing Uint16");
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<uint16_t>(pixel_info, data, 0.0, 65535.0));
+					break;
+			}
+			break;
+		case 2:
+			switch (pixel_info.bits_per_sample[0]) {
+				case 8:
+					LOG_DEBUG("Writing Int8");
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<int8_t>(pixel_info, data, -128., 127.));
+					break;
+				case 16:
+					LOG_DEBUG("Writing Int16");
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<int16_t>(pixel_info, data, -32768., 32767.));
+					break;
+			}
+			break;
+		case 3:
+			switch (pixel_info.bits_per_sample[0]){
+				default:
+					//data = TIFF_read_strips_to_double<double>(tptr, n_strips, strip_size, planar_config, samples_per_pixel);
+					LOG_ERROR("Sample format 'double' for TIFF file not supported yet. Exiting...");
+					std::exit(EXIT_FAILURE);
+			}
+			break;
+		default:
+			LOG_ERROR("Unknown sample format '%' for TIFF file. Exiting...", pixel_info.sample_format);
+			std::exit(EXIT_FAILURE);
+	}
+}
 
 template<class T>
 std::vector<double> TIFF_read_strips_to_double(
@@ -34,6 +200,7 @@ std::vector<double> TIFF_read_strips_to_double(
 		double raw_min,
 		double raw_max
 	){
+	// NOTE: only greyscale output data is supported
 	GET_LOGGER;
 	LOGV_DEBUG(typeid(T).name());
 	LOGV_DEBUG(n_strips, strip_size, planar_config, samples_per_pixel, raw_min, raw_max);
@@ -105,7 +272,7 @@ std::vector<double> TIFF_read_strips_to_double(
 		LOG_WARN("Not tested PLANARCONFIG=2 yet");
 		for (size_t i=0; i< data.size(); ++i){
 			data[i] = stretch_range<double>(
-				1.0*raw[i/3 +(i%samples_per_pixel)*image_width], 
+				1.0*raw[i/samples_per_pixel +(i%samples_per_pixel)*image_width], 
 				1.0*raw_min, 
 				1.0*raw_max, 
 				1.0*min_sample_value[i%samples_per_pixel], 
@@ -123,10 +290,83 @@ std::vector<double> TIFF_read_strips_to_double(
 	return data;
 }
 
-std::vector<double> TIFF_read_strips(TIFF* tptr);
+template<class T=double>
+std::span<uint8_t> TIFF_bytes_like(
+		const std::string& original_file_name, 
+		const std::string& file_name,
+		const std::vector<T>& data
+	){
+	GET_LOGGER;
+	// Create a TIFF with as much of the same structure as `original_file_name` as possible
+	
+	// Get the raw data of the original file
+	std::vector<std::byte>& original_file_raw_data = Storage::BlobMgr::get(original_file_name);
+	
+	// Copy original file data to new location, the copy will be altered in this function
+	Storage::BlobMgr::store_named(file_name, original_file_raw_data);	
+	
+	TIFF* original_tptr = TIFF_open(original_file_name, "rm");
+	
+	if (!TIFF_uses_strips(original_tptr)){
+		LOG_ERROR("Only TIFF files that use strips are supported at the moment. Exiting...");
+		std::exit(EXIT_FAILURE);
+	}
+	
+	// Get pixel format etc. for original file
+	TIFF_ImageShape original_image_shape(original_tptr);
+	TIFF_PixelInfo original_pixel_info(original_tptr);
+	TIFF_LayoutInfo original_layout_info;
+	
+	if(original_pixel_info.uses_strips){
+		original_layout_info.fill_from(TIFF_StripInfo(original_tptr));
+	}
+	else if (original_pixel_info.uses_tiles){
+		original_layout_info.fill_from(TIFF_TileInfo(original_tptr));
+	}
+	else {
+		LOG_ERROR("Unknown if TIFF uses tile or strip layout. This should never happen");
+		exit(EXIT_FAILURE);
+	}
+	
+	// update min and max sample values
+	for (size_t i=0; i<original_pixel_info.samples_per_pixel; ++i){
+		LOGV_DEBUG(du::min(data));
+		LOGV_DEBUG(du::max(data));
+		LOGV_DEBUG(du::sum(data));
+		original_pixel_info.min_sample_value[i] = du::min(data);
+		original_pixel_info.max_sample_value[i] = du::max(data);
+	}
+	
+	
+	TIFF* tptr = TIFF_open(file_name, "r+m");
+	
+	
+	// Write new data into copied file.
+	if(original_pixel_info.uses_strips){
+		TIFF_write_strips(
+			tptr,
+			original_layout_info,
+			original_pixel_info,
+			data
+		);
+	}
+	else if (original_pixel_info.uses_tiles){
+		LOG_ERROR("TIFF tile layout unsupported");
+		exit(EXIT_FAILURE);
+	}
+	else {
+		LOG_ERROR("TIFF layout is unknown, must be strips or tiles");
+		exit(EXIT_FAILURE);
+	}
+	
+	
+	TIFF_close(file_name);
+	
+	// Get the written file as a span of uint8_t
+	std::span<uint8_t> ret = Storage::BlobMgr::get_as<uint8_t>(file_name);
 
-std::string TIFF_from_js_array(const std::string& name, const emscripten::val& uint8_array);
-
+	return ret;
+}
 
 
 #endif //__TIFF_HELPER_INCLUDED__

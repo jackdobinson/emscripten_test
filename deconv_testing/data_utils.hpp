@@ -417,6 +417,8 @@ namespace data_utils{
 
 	// SHAPES
 	
+	
+	
 	template <class T>
 	std::vector<T> get_strides(const std::vector<T>& shape){
 		// Assume fastest varying axis is on LHS
@@ -477,7 +479,8 @@ namespace data_utils{
 			const std::vector<size_t>& a_shape, 
 			const std::vector<size_t>& b_shape, 
 			const std::vector<size_t>& a_fpixel, 
-			const std::vector<size_t>& a_fpixel_b
+			const std::vector<size_t>& a_fpixel_b,
+			const int mode=0 //0 - clip, 1 - wrap around
 		){
 		// a - smaller array to copy from
 		// b - larger array to copy to
@@ -520,7 +523,24 @@ namespace data_utils{
 			idx_in_b = true;
 			for(short k=0; k<b_shape.size(); ++k){
 				b_idxs[k] = a_fpixel_b[k] + (a_idxs[k] - a_fpixel[k]);
-				if(b_idxs[k] >= b_shape[k]) idx_in_b=false;
+				if(b_idxs[k] >= b_shape[k]) {
+					switch(mode){
+						case 0:{
+							// Clip copy from a to b
+							idx_in_b = false;
+							break;
+						}
+						case 1:{
+							// wrap copy from a to b
+							b_idxs[k] = b_idxs[k] % b_shape[k];
+							break;
+						}
+						default:{
+							LOG_ERROR("Unknown mode '%'. Should be one of {0 (clip), 1 (wrap around)}", mode);
+							break;
+						}
+					}
+				}
 			}
 			//LOGV_DEBUG(b_idxs);
 
@@ -567,6 +587,24 @@ namespace data_utils{
 			imag_dest[i] = source[i].imag();
 		}
 		return;
+	}
+
+	// RESHAPE ARRAYS
+	
+	template <class T1, class T2, class T3>
+	std::vector<T1> reshape(
+			const std::vector<T1>& data, 
+			const std::vector<T2>& original_shape, 
+			const std::vector<T3>& new_shape
+		){
+		std::vector<size_t> fpixel_data(original_shape.size(), 0);
+		std::vector<size_t> fpixel_reshaped_data(new_shape.size(), 0);
+		size_t new_size = product(new_shape);
+		std::vector<T1> reshaped_data(new_size, 0);
+		
+		
+		copy_to_rect(data, reshaped_data, original_shape, new_shape, fpixel_data, fpixel_reshaped_data);
+		return reshaped_data;
 	}
 
 	// SUBTRACT ARRAYS

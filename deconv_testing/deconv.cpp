@@ -86,7 +86,8 @@ CleanModifiedAlgorithm::CleanModifiedAlgorithm(
 		data_shape(),
 		residual_data(0), 
 		components_data(0), 
-		px_choice_map(0), 
+		px_choice_map(0),
+		data_shape_adjustment(0),
 		padded_psf_data(0), 
 		selected_pixels(0), 
 		current_convolved(0),
@@ -271,19 +272,15 @@ void CleanModifiedAlgorithm::_select_update_pixels(){
 	du::set_at_mask(selected_pixels, px_choice_map, residual_data);
 }
 
-std::pair<
-	std::vector<double>,
-	std::vector<size_t>
-> CleanModifiedAlgorithm::_ensure_odd(
-	const std::vector<double>& obs_data, 
-	const std::vector<size_t>& obs_shape
-){
-	std::vector<size_t> alter_obs_shape(obs_shape.size(),0);
+std::pair<std::vector<double>,std::vector<size_t>> CleanModifiedAlgorithm::_ensure_odd(
+		const std::vector<double>& obs_data, 
+		const std::vector<size_t>& obs_shape
+	){
 	for(size_t i=0; i<obs_shape.size(); ++i){
-		alter_obs_shape[i] = 1 - obs_shape[i]%2;
+		data_shape_adjustment[i] = 1-obs_shape[i]%2;
 	}
 	std::vector<size_t> new_obs_shape(obs_shape);
-	du::add_inplace(new_obs_shape, alter_obs_shape);
+	du::add_inplace(new_obs_shape, data_shape_adjustment);
 
 	std::vector<double> new_obs_data(du::product(new_obs_shape), 0);
 	
@@ -293,6 +290,7 @@ std::pair<
 
 	return std::make_pair(new_obs_data, new_obs_shape);
 }
+
 
 
 void CleanModifiedAlgorithm::doIter(
@@ -371,6 +369,7 @@ void CleanModifiedAlgorithm::prepare_observations(
 	
 	data_shape = obs_shape;
 	data_size = du::product(data_shape);
+	data_shape_adjustment.resize(data_shape.size());
 
 	LOG_DEBUG("resize dynamic arrays");
 	// resize arrays to hold desired data
@@ -420,7 +419,9 @@ void CleanModifiedAlgorithm::prepare_observations(
 	auto psf_fft_ifft = ifft(psf_fft);
 	du::write_as_image(_sprintf("./plots/%psf_fft_ifft_real.pgm", tag), du::real_part(psf_fft_ifft), data_shape);
 	du::write_as_image(_sprintf("./plots/%psf_fft_ifft_imag.pgm", tag), du::imag_part(psf_fft_ifft), data_shape);
-	}
+}
+
+
 
 void CleanModifiedAlgorithm::run(){
 	GET_LOGGER;

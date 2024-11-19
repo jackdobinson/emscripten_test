@@ -86,10 +86,12 @@
 
 		<div id="results" class="h-flow">
 			<div class="item">
-				<canvas id="clean_map_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+				<canvas id="clean_map_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+				<button class="download-result" id="download-clean-map-button" type="button">Download .TIFF</button>
 			</div>
 			<div class="item">
-				<canvas id="residual_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+				<canvas id="residual_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+				<button class="download-result" id="download-residual-button" type="button">Download .TIFF</button>
 			</div>
 		</div>
 
@@ -109,6 +111,7 @@
 		<script type="text/javascript" src="js_modules/extent_ops.js"></script>
 		<script type="text/javascript" src="js_modules/path_ops.js"></script>
 		
+		<script type="text/javascript" src="wasm_data_downloader.js"></script>
 		<script type="text/javascript" src="qplot.js"></script>
 		<script type="text/javascript" src="image_holder.js"></script>
 		<script type="text/javascript" src="deconv_params.js"></script>
