@@ -1,6 +1,8 @@
 #ifndef __DECONV_INCLUDED__
 #define __DECONV_INCLUDED__
 
+#include <string_view>
+
 //#include <iostream>
 #include "Eigen/Dense"
 #include "Eigen/LU"
@@ -49,9 +51,9 @@ class CleanModifiedAlgorithm {
 	public:
 
 	// Where to store results
-	Storage::blob_id_t BLOB_ID_COMPONENTS=Storage::BlobMgr::get_free_id();
-	Storage::blob_id_t BLOB_ID_CLEAN_MAP=Storage::BlobMgr::get_free_id();
-	Storage::blob_id_t BLOB_ID_RESIDUAL=Storage::BlobMgr::get_free_id();
+	static constexpr char BLOB_ID_COMPONENTS[]="deconv.component_data";
+	static constexpr char BLOB_ID_CLEAN_MAP[]="deconv.clean_map";
+	static constexpr char BLOB_ID_RESIDUAL[]="deconv.residual_data";
 
 	// deconvolution parameters
 	size_t n_iter;
@@ -126,8 +128,8 @@ class CleanModifiedAlgorithm {
 	);
 	
 	void prepare_observations(
-		std::vector<double>& obs_data, 
-		std::vector<size_t> obs_shape, 
+		const std::vector<double>& obs_data, 
+		const std::vector<size_t>& obs_shape, 
 		const std::vector<double>& psf_data, 
 		const std::vector<size_t>& psf_shape,
 		const std::string& run_tag=""

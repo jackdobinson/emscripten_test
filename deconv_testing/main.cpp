@@ -25,19 +25,11 @@ emscripten::val image_as_JSImageData(const std::string& name){
 	GET_LOGGER;
 	LOGV_DEBUG(name);
 
-	static std::map<std::string, Storage::blob_id_t> js_image_name_blob_id_map;
-
-	js_image_name_blob_id_map.try_emplace(name, Storage::BlobMgr::get_free_id());
-
-	Storage::blob_id_t blob_id = js_image_name_blob_id_map[name];
-
-	LOGV_DEBUG(blob_id);
-
 	const Image& image = Storage::images[name];
 
 	LOGV_DEBUG(image.data);
 
-	std::span<uint8_t> image_data = image_as_blob<uint8_t>(blob_id, image.data, image.pxfmt);
+	std::span<uint8_t> image_data = image_as_blob<uint8_t>(name, image.data, image.pxfmt);
 
 
 	return emscripten::val(emscripten::typed_memory_view(image_data.size(), image_data.data()));
@@ -179,9 +171,9 @@ void run_deconvolver(
 	
 	deconvolver.run();
 
-	const std::span<std::byte>& temp = image_as_blob(deconvolver.BLOB_ID_CLEAN_MAP, deconvolver.clean_map);
-	LOG_DEBUG("sending clean_map to debug canvas");
-	send_to_js_canvas(temp.data(), temp.size(), sci_image.shape[0]+1-sci_image.shape[0]%2, sci_image.shape[1]+1-sci_image.shape[1]%2);
+	//const std::span<std::byte>& temp = image_as_blob(deconvolver.BLOB_ID_CLEAN_MAP, deconvolver.clean_map);
+	//LOG_DEBUG("sending clean_map to debug canvas");
+	//send_to_js_canvas(temp.data(), temp.size(), sci_image.shape[0]+1-sci_image.shape[0]%2, sci_image.shape[1]+1-sci_image.shape[1]%2);
 
 }
 
@@ -209,18 +201,20 @@ emscripten::val get_deconvolver_residual(
 	return vector_as_JSImageData(deconvolver.BLOB_ID_RESIDUAL, deconvolver.residual_data);
 }
 
-// TODO: For some reason, output TIFF images are slanted. 
-// So are inputs if we re-use the image instead of uploading a new one.
+// TODO: 
+// * When outputting in TIFF format, how to I preserve the flux-conservation properties of
+//   the deconvolution algorithm?
 emscripten::val get_tiff(
 		const std::string& deconv_type, 
 		const std::string& deconv_name, 
 		const std::string& file_id,
 		const std::string& original_file_name
 	){
-	
+	GET_LOGGER;
 	// Only one deconvolver type right now, therefore skip deconv_type dispatch
 	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
-	std::vector<size_t> raw_data_shape = du::add(deconv.data_shape, deconv.data_shape_adjustment);
+	LOGV_DEBUG(deconv.data_shape, deconv.data_shape_adjustment);
+	std::vector<size_t> raw_data_shape = du::subtract(deconv.data_shape, deconv.data_shape_adjustment);
 	std::vector<double> raw_data(du::product(raw_data_shape));
 	
 	if (file_id == "deconv.clean_map"){

@@ -1,6 +1,7 @@
 #ifndef __FILE_LIKE_INCLUDED__
 #define __FILE_LIKE_INCLUDED__
 
+#include <cassert>
 #include "logging.h"
 
 /*
@@ -15,20 +16,36 @@ const uint64_t PetaByte = 2ULL<<50;
 const uint64_t ExaByte  = 2ULL<<60;
 
 struct FileLike{
-	std::span<std::byte> bytes;
-	size_t pos = 0;
+	std::string file_name;
+	std::vector<std::byte> bytes;
+	size_t pos;
+	bool is_open;
+	bool contents_changed;
+	
+	FileLike();
+	FileLike(const std::string& _file_name, const std::vector<std::byte>& _bytes);
+	
+	void set_open_with_contents(const std::vector<std::byte>& new_bytes, bool _contents_changed=false);
+	
+	
+	template<class PTR>
+	static FileLike& cast_from_ptr(PTR p){
+		return *(static_cast<FileLike*>(static_cast<void*>(p)));
+	}
 
 	template<class PTR, class BUF, class SIZE>
 	static SIZE readproc(PTR fptr, BUF buf, SIZE size){
-		FileLike& mc = *((FileLike*)(fptr));
+		FileLike& fp = cast_from_ptr(fptr);
+		assert(fp.is_open);
+		
 		std::byte* bbuf = (std::byte*)(buf);
 		size_t i=0;
-		size_t j=mc.pos;
-		for (i=0; i<size && j<mc.bytes.size(); ++i,++j){
-			bbuf[i] = mc.bytes[j];
+		size_t j=fp.pos;
+		for (i=0; i<size && j<fp.bytes.size(); ++i,++j){
+			bbuf[i] = fp.bytes[j];
 		}
 		const size_t n_read = i;
-		mc.pos += n_read;
+		fp.pos += n_read;
 		return n_read;
 	}
 
@@ -36,24 +53,30 @@ struct FileLike{
 	static SIZE writeproc(PTR fptr, BUF buf, SIZE size){
 		GET_LOGGER;
 		
-		FileLike& mc = *((FileLike*)(fptr)); // cast pointer as a filelike
+		FileLike& fp = cast_from_ptr(fptr); // cast pointer as a filelike
+		assert(fp.is_open);
 		std::byte* bbuf = (std::byte*)(buf); // cast the buffer as a string of bytes
 		
+		size_t old_pos = fp.pos;
 		size_t i=0; // index of current buffer byte
-		size_t j=mc.pos; // index of current file byte
+		size_t j=fp.pos; // index of current file byte
 		
-		if (mc.pos + size > mc.bytes.size()){
+		if (fp.pos + size > fp.bytes.size()){
 			LOG_ERROR(
 				"Cannot write past end of span for filelike object. Holder size is %, want to write % bytes from location % to location %.", 
-				mc.bytes.size(), size, mc.pos, mc.pos+size
+				fp.bytes.size(), size, fp.pos, fp.pos+size
 			);
 			return -1;
 		}
 		
 		for(i=0; i<size; ++i,++j){
-			mc.bytes[j] = bbuf[i];
+			fp.bytes[j] = bbuf[i];
 		}
-		mc.pos += i;
+		fp.pos += i;
+		
+		if (fp.pos != old_pos){ // if any data was written, the contents is now changed
+			fp.contents_changed = true;
+		}
 		return i;
 	}
 
@@ -63,29 +86,30 @@ struct FileLike{
 		//LOG_DEBUG("Seeking file % offset % whence %", fptr, offset, whence);
 
 		size_t new_pos;
-		FileLike& mc = *((FileLike*)(fptr));
+		FileLike& fp = cast_from_ptr(fptr);
+		assert(fp.is_open);
 
 		switch (whence) {
 			case (SEEK_SET):
 				new_pos = offset;
 				break;
 			case (SEEK_CUR):
-				new_pos = mc.pos + offset;
+				new_pos = fp.pos + offset;
 				break;
 			case (SEEK_END):
-				new_pos = mc.bytes.size() + offset;
+				new_pos = fp.bytes.size() + offset;
 				break;
 			default:
 				LOG_ERROR("Unknown 'whence' parameter when seeking TIFF file '%'. Accepted values are SEEK_SET=% SEEK_CUR=% SEEK_END=%", whence, SEEK_SET, SEEK_CUR, SEEK_END);
 				return -1;
 		}
 
-		if (new_pos > mc.bytes.size()){
+		if (new_pos > fp.bytes.size()){
 			LOG_ERROR("Cannot seek past the end of a file");
 			return -1;
 		}
 
-		mc.pos = new_pos;
+		fp.pos = new_pos;
 		return new_pos;
 	}
 
@@ -93,24 +117,35 @@ struct FileLike{
 	static int closeproc(PTR fptr){
 		// NOTE: I think this might be causing some problems
 		
-		//GET_LOGGER;
+		GET_LOGGER;
 		//LOG_DEBUG("Closing file %", fptr);
-		FileLike* mc = (FileLike*)fptr;
-		// NOTE: because of the peculiar way that emscripten passes chunks of memory to the program, should free
-		// the bytes here, then delete the memory chunk.
-		//free (mc->bytes.data);
-		delete mc;
+		FileLike& fp = cast_from_ptr(fptr);
+		assert(fp.is_open);
+		fp.is_open=false;
+		
+		// If we have altered the data
+		if(fp.contents_changed){
+			LOG_DEBUG("Contents of FileLike for '%' have changed, we should write altered data.", fp.file_name);
+		} else {
+			LOG_DEBUG("Contents of FileLike for '%' have NOT changed.", fp.file_name);
+		}
+		
+		
 		return 0;
 	}
 
 	template<class PTR, class OFFSET>
 	static OFFSET sizeproc(PTR fptr){
-		return ((FileLike*)(fptr))->bytes.size();
+		FileLike& fp = cast_from_ptr(fptr);
+		assert(fp.is_open);
+		return fp.bytes.size();
 	}
 	
 	template<class PTR, class BUF, class OFFSET>
 	static int mapfileproc(PTR fptr, BUF* buf, OFFSET* size){
 		GET_LOGGER;
+		FileLike& fp = cast_from_ptr(fptr);
+		assert(fp.is_open);
 		LOG_WARN("memory mapping not supported");
 		return -1;
 	}
@@ -118,6 +153,8 @@ struct FileLike{
 	template<class PTR, class BUF, class OFFSET>
 	static void unmapfileproc(PTR fptr, BUF buf, OFFSET size){
 		GET_LOGGER;
+		FileLike& fp = cast_from_ptr(fptr);
+		assert(fp.is_open);
 		LOG_WARN("un-memory mapping not supported");
 		return;
 	}

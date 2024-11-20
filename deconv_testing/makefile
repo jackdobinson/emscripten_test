@@ -61,7 +61,7 @@ CXXFLAGS=                       \
 #	-fexceptions                \
 
 deconv.js : *.cpp *.h *.hpp
-	$(CXX) deconv.cpp str_printf.cpp data_utils.cpp fft.cpp storage.cpp tiff_helper.cpp main.cpp -o deconv.js $(CXXFLAGS)
+	$(CXX) file_like.cpp deconv.cpp str_printf.cpp data_utils.cpp fft.cpp storage.cpp tiff_helper.cpp main.cpp -o deconv.js $(CXXFLAGS)
 
 clean:
 	rm -f deconv

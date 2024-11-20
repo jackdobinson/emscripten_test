@@ -26,14 +26,19 @@ T stretch_range(
 
 template<class R=std::byte, class T>
 std::span<R> image_as_blob(
-		Storage::blob_id_t blob_id, 
+		const std::string& name, 
 		const std::vector<T>& a, 
-		const PixelFormat input_pixel_format=GreyscalePixelFormat
+		const PixelFormat input_pixel_format=GreyscalePixelFormat,
+		const std::string& name_tag = "__image_data"
 	){
 	GET_LOGGER;
 
-	LOGV_DEBUG(blob_id, a, input_pixel_format.channels_per_pixel);
+	std::string image_name = name + name_tag;
 
+	LOGV_DEBUG(image_name, a, input_pixel_format.channels_per_pixel);
+	LOGV_DEBUG(a.size());
+	
+	
 	T min = a[0], max=a[0];
 	for(const T& item : a){
 		if (item > max) max = item;
@@ -43,12 +48,8 @@ std::span<R> image_as_blob(
 	const PixelFormat output_pixel_format = RGBAPixelFormat;
 	size_t size_of_image_data = round_to<int>((1.0*output_pixel_format.channels_per_pixel*a.size())/input_pixel_format.channels_per_pixel);
 
-	Storage::blobs.try_emplace(
-		blob_id,
-		size_of_image_data
-	);
-
-	std::vector<std::byte>& image_data = Storage::blobs[blob_id];
+	Storage::named_blobs[image_name] = std::vector<std::byte>(size_of_image_data);
+	std::vector<std::byte>& image_data = Storage::named_blobs[image_name];
 
 	LOGV_DEBUG(image_data.size(), size_of_image_data);
 	assert(image_data.size() == size_of_image_data);
@@ -81,20 +82,20 @@ std::span<R> image_as_blob(
 		}
 	}
 
-	return Storage::BlobMgr::get_as<R>(blob_id);
+	return std::span<R>((R*)(image_data.data()), (R*)(image_data.data()+image_data.size()));
 }
 
 
 template<class T>
 emscripten::val vector_as_JSImageData(
-		Storage::blob_id_t blob_id, 
+		const std::string& name, 
 		const std::vector<T>& a, 
 		const PixelFormat input_pixel_format=GreyscalePixelFormat
 	){
 	GET_LOGGER;
 	LOGV_DEBUG(a.data());
 
-	std::span<uint8_t> image_data = image_as_blob<uint8_t,T>(blob_id, a, input_pixel_format);
+	std::span<uint8_t> image_data = image_as_blob<uint8_t,T>(name, a, input_pixel_format);
 	return emscripten::val(emscripten::typed_memory_view(image_data.size(), image_data.data()));
 }
 

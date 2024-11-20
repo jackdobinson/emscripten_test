@@ -272,21 +272,30 @@ void CleanModifiedAlgorithm::_select_update_pixels(){
 	du::set_at_mask(selected_pixels, px_choice_map, residual_data);
 }
 
-std::pair<std::vector<double>,std::vector<size_t>> CleanModifiedAlgorithm::_ensure_odd(
+std::pair<std::vector<double>, std::vector<size_t>> CleanModifiedAlgorithm::_ensure_odd(
 		const std::vector<double>& obs_data, 
 		const std::vector<size_t>& obs_shape
 	){
+	GET_LOGGER;
+	
+	LOG_DEBUG("Ensuring odd shape of input data");
+	
+	
+	data_shape_adjustment.resize(obs_shape.size());
 	for(size_t i=0; i<obs_shape.size(); ++i){
 		data_shape_adjustment[i] = 1-obs_shape[i]%2;
 	}
-	std::vector<size_t> new_obs_shape(obs_shape);
-	du::add_inplace(new_obs_shape, data_shape_adjustment);
+	LOGV_DEBUG(data_shape_adjustment);
+	
+	std::vector<size_t> new_obs_shape = du::add(obs_shape, data_shape_adjustment);
 
 	std::vector<double> new_obs_data(du::product(new_obs_shape), 0);
 	
 	std::vector<size_t> zero(obs_shape.size(),0);
 
 	du::copy_to_rect(obs_data, new_obs_data, obs_shape, new_obs_shape, zero, zero);
+
+	
 
 	return std::make_pair(new_obs_data, new_obs_shape);
 }
@@ -322,7 +331,7 @@ void CleanModifiedAlgorithm::doIter(
 		//du::write_as_image(_sprintf("./plots/%selected_pixels_fft_ifft_%.pgm", tag, i), du::real_part(ifft_data_shape(selected_px_fft)), data_shape); 
 		du::write_as_image(_sprintf("./plots/%current_convolved_%.pgm", tag, i), current_convolved, data_shape); 
 		
-		const std::span<std::byte>& temp = image_as_blob(BLOB_ID_COMPONENTS, components_data);
+		const std::span<std::byte>& temp = image_as_blob(std::string(BLOB_ID_COMPONENTS), components_data);
 		send_to_js_canvas(temp.data(), temp.size(), data_shape[0], data_shape[1]);
 	}
 
@@ -350,10 +359,10 @@ void CleanModifiedAlgorithm::doIter(
 }
 
 void CleanModifiedAlgorithm::prepare_observations(
-		std::vector<double>& obs_data, 
-		std::vector<size_t> obs_shape, 
-		const std::vector<double>& psf_data, 
-		const std::vector<size_t>& psf_shape,
+		const std::vector<double>& input_obs_data, 
+		const std::vector<size_t>& input_obs_shape, 
+		const std::vector<double>& input_psf_data, 
+		const std::vector<size_t>& input_psf_shape,
 		const std::string& run_tag
 	){
 	GET_LOGGER;
@@ -361,11 +370,8 @@ void CleanModifiedAlgorithm::prepare_observations(
 
 	
 	tag=run_tag;
-
-
-	std::pair<std::vector<double>, std::vector<size_t>> ret = _ensure_odd(obs_data, obs_shape);
-	obs_data = ret.first;
-	obs_shape = ret.second;
+	
+	auto [obs_data, obs_shape] = _ensure_odd(input_obs_data, input_obs_shape);
 	
 	data_shape = obs_shape;
 	data_size = du::product(data_shape);
@@ -401,14 +407,11 @@ void CleanModifiedAlgorithm::prepare_observations(
 	_get_residual_from_obs(obs_data, data_shape);
 
 	LOG_DEBUG("Padding PSF data");
-	_get_padded_psf(psf_data, data_shape, psf_shape);
+	_get_padded_psf(input_psf_data, data_shape, input_psf_shape);
 		
 	LOG_DEBUG("precompute PSF FFT");
 	// get the FFT of the PSF, will need it later
 	psf_fft = fft(padded_psf_data);
-
-	du::write_as_image(_sprintf("./plots/%psf_raw.pgm", tag), psf_data, psf_shape);
-	du::write_as_image(_sprintf("./plots/%obs_raw.pgm", tag), obs_data, data_shape);
 
 	du::write_as_image(_sprintf("./plots/%psf_padded.pgm", tag), padded_psf_data, data_shape);
 
@@ -431,6 +434,8 @@ void CleanModifiedAlgorithm::run(){
 	for(size_t i=0; i<n_iter; ++i){
 		doIter(i);
 	}
+
+	LOGV_DEBUG(data_shape);
 
 	du::write_as_image(_sprintf("./plots/%components.pgm", tag), components_data, data_shape);
 	du::write_as_image(_sprintf("./plots/%residual.pgm", tag), residual_data, data_shape);

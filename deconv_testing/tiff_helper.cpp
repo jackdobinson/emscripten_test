@@ -81,33 +81,60 @@ TIFF_ImageShape::TIFF_ImageShape(TIFF* tptr){
 	height = TIFF_height(tptr);
 }
 
+TIFF_Ptr::TIFF_Ptr(const std::string& _name, const char* mode){
+	GET_LOGGER;
+	name = _name;
+	p = nullptr;
+	should_close=false;
+	
+	auto tptr_it = Storage::objects<TIFF*>.find(name);
+	if(tptr_it == Storage::objects<TIFF*>.end()){
+		LOG_DEBUG("Could not get TIFF pointer as no TIFF pointer for '%'", name);
+	} else {
+		if(tptr_it->second == nullptr){
+			LOG_DEBUG("Could not get TIFF pointer as TIFF pointer for '%' is NULL", name);
+		} else {
+			LOG_DEBUG("Got TIFF pointer without opening file, therefore should NOT close it after I am done");
+			p = tptr_it->second;
+		}
+	}
+	
+	if (p == nullptr){
+		p = TIFF_open(name, mode);
+		should_close=true;
+		LOG_DEBUG("Got TIFF pointer but had to open file, therefore should close it after I am done");
+	}
+}
+TIFF_Ptr::~TIFF_Ptr(){
+	if(should_close){
+		TIFF_close(name);
+	}
+}
+
+TIFF_Ptr::operator TIFF*() const {
+	return p;
+}
+
 uint16_t TIFF_get_width(const std::string& name){
 	GET_LOGGER;
+	LOG_DEBUG("Getting width of TIFF file '%'", name);
+	TIFF_Ptr tptr(name);
 	
-	TIFF* tptr = TIFF_open(name, "rm");
+	uint16_t image_width = TIFF_width(tptr);
 	
-	if (tptr == nullptr){
-		LOG_ERROR("Could not open TIFF file %", name);
-		exit(EXIT_FAILURE);
-	}
-	
-	uint16_t image_width;
-	if (! TIFFGetField(tptr, TIFFTAG_IMAGEWIDTH, &image_width)){
-		LOG_WARN("Could not determineimage_width for TIFF file. Exiting...");
-		std::exit(EXIT_FAILURE);
-	}
+	LOG_DEBUG("Returning width of image: %", image_width);
 	return image_width;
 }
 
 uint16_t TIFF_get_height(const std::string& name){
 	GET_LOGGER;
-	TIFF* tptr = TIFF_open(name, "rm");
-	uint16_t ret;
-	if (! TIFFGetField(tptr, TIFFTAG_IMAGELENGTH, &ret)){
-		LOG_WARN("Could not determine image length for TIFF file. Exiting...");
-		std::exit(EXIT_FAILURE);
-	}
-	return ret;
+	LOG_DEBUG("Getting height of TIFF file '%'", name);
+	TIFF_Ptr tptr(name);
+	
+	uint16_t height = TIFF_height(tptr);
+	
+	LOG_DEBUG("Returning height of image: %", height);
+	return height;
 }
 
 uint16_t TIFF_width(TIFF* tptr){
@@ -268,37 +295,37 @@ std::vector<double> TIFF_read_strips(TIFF* tptr){
 // May have to write our own class that sits on top of libtiff and intelligently finds the
 // number of bytes per sample, samples per pixel, and dumps uncompressed raw image data into memory.
 
-const std::string OPEN_FILE_TAG="__open_copy";
+
 
 TIFF* TIFF_open(const std::string& name, const char* mode){
 	GET_LOGGER;
-	LOG_DEBUG("Opening TIFF file %", name);
+	LOG_DEBUG("Opening TIFF file '%'", name);
+	
+	//const std::string opened_file_name = Storage::get_opened_file_name(name);
 	
 	// ERROR: Calling TIFFClose(...) in any form invalidates the data we "stored on disk"
 	// Therefore, need to always copy when opening
 	
-	std::vector<std::byte> persistent_data = Storage::BlobMgr::get(name);
+	std::vector<std::byte>& persistent_data = Storage::named_blobs.at(name);
 	LOGV_DEBUG(&persistent_data);
 	LOGV_DEBUG(persistent_data);
-	
-	Storage::BlobMgr::store_named(name+OPEN_FILE_TAG, persistent_data);
-	
-	std::vector<std::byte>& raw_data = Storage::BlobMgr::get(name+OPEN_FILE_TAG);
-	
-	LOGV_DEBUG(&raw_data);
-	LOGV_DEBUG(raw_data);
-	
-	if (Storage::filelikes.contains(name)) {
-		Storage::filelikes[name].bytes = std::span<std::byte>(raw_data.begin(), raw_data.end());
+
+	LOG_DEBUG("Printing FileLike map:");
+	for(const auto& [key, value] : Storage::filelikes){
+		LOG_DEBUG("\t% : file_name % bytes % pos % is_open % contents_changed %", key, value.file_name, value.bytes, value.pos, value.is_open, value.contents_changed);
 	}
-	else {
-		Storage::filelikes.emplace(
-			name,
-			FileLike(
-				std::span<std::byte>(raw_data.begin(), raw_data.end())
-			)
-		);
+
+	
+	auto filelike_it = Storage::filelikes.find(name);
+	if (filelike_it == Storage::filelikes.end()) { // not present, so create it
+		LOG_DEBUG("Not found FileLike for '%', creating a new one...", name);
+		Storage::filelikes[name] = FileLike(name, persistent_data);
 	}
+	else { // is present so copy data to it
+		LOG_DEBUG("Found FileLike for '%', reusing...", name);
+		filelike_it->second.set_open_with_contents(persistent_data);
+	}
+	
 	FileLike* tiff_data = &(Storage::filelikes[name]);
 	LOGV_DEBUG(tiff_data);
 	LOGV_DEBUG(tiff_data->bytes);
@@ -323,47 +350,51 @@ TIFF* TIFF_open(const std::string& name, const char* mode){
 		exit(EXIT_FAILURE);
 	}
 	
-	if (MemFileRegistry.contains(name)){
-		LOG_ERROR("TIFF file '%' is already open, cannot open twice", name);
-	}
+	Storage::objects<TIFF*>[name] = tptr;
 	
-	MemFileRegistry[name] = FPtr(
-		FileType::TIFF,
-		tptr
-	);
-	
-	LOGV_DEBUG(raw_data);
 	LOGV_DEBUG(tiff_data->bytes);
 	return tptr;
 }
 
 void TIFF_close(const std::string& name){
 	GET_LOGGER;
-	LOG_DEBUG("Closing TIFF file %", name);
+	LOG_DEBUG("Closing TIFF file '%'", name);
 	
 	// ERROR: Calling TIFFClose(...) in any form invalidates the data we "stored on disk"
 	// Therefore, need to always copy when opening
 	
+	auto tptr_it = Storage::objects<TIFF*>.find(name);
 	
+	// If we have a valid pointer to a TIFF object under the passed name,
+	// we should close the file. Otherwise we throw an error
 	
-	if (MemFileRegistry.contains(name)){
-		// Write the 'copy' to disk
-		Storage::BlobMgr::store_named(name, Storage::BlobMgr::get(name+OPEN_FILE_TAG));
-	
-		LOG_DEBUG("MemFileRegistry contains file");
-		TIFF* tptr = MemFileRegistry_get<TIFF>(name);
-		LOG_DEBUG("Got pointer from MemFileRegistry");
-		// File is closed when MemFileRegistry entry is deleted
-		//TIFFClose(tptr);
-		//LOG_DEBUG("Closed TIFF file via library function");
-		MemFileRegistry_delete(name);
-		
-		LOG_DEBUG("MemFileRegistry entry deleted");
-		//Storage::blobs.erase(Storage::blob_name_to_id_map[name+OPEN_FILE_TAG]);
-		//LOG_DEBUG("Erased copied storage");
-		//Storage::blob_name_to_id_map.erase(name+OPEN_FILE_TAG);
-		//LOG_DEBUG("Erased name to id mapping");
+	if(tptr_it == Storage::objects<TIFF*>.end()){
+		LOG_ERROR("Could not find TIFF* for file '%'", name);
+		exit(EXIT_FAILURE);
 	}
+	if ((tptr_it->second) == nullptr){
+		LOG_ERROR("TIFF* for file '%' is null, cannot close a null pointer", name);
+		exit(EXIT_FAILURE);
+	}
+	
+	auto filelike_it = Storage::filelikes.find(name);
+	if(filelike_it == Storage::filelikes.end()){
+		LOG_ERROR("Could not find FileLike for file '%'", name);
+		exit(EXIT_FAILURE);
+	}
+	if(!(filelike_it->second.is_open)){
+		LOG_ERROR("FileLike for file '%' is not open, cannot close a non-open file", name);
+		exit(EXIT_FAILURE);
+	}
+	
+	if (filelike_it->second.contents_changed){
+		LOG_DEBUG("Contents of filelike '%' have changed, writing to persistent storage...", filelike_it->second.file_name);
+		Storage::named_blobs[filelike_it->second.file_name] = filelike_it->second.bytes;
+	}
+	
+	TIFFClose(tptr_it->second);
+	tptr_it->second = nullptr; // set to null after closing
+	
 	LOG_DEBUG("TIFF file closed");
 }
 
@@ -371,24 +402,31 @@ std::string TIFF_from_js_array(const std::string& name, const emscripten::val& u
 	GET_LOGGER;
 
 	// Store the raw TIFF data in a blob so we can access it later
-	if (!Storage::BlobMgr::has(name)){
-		Storage::BlobMgr::store_named(name, emscripten::convertJSArrayToNumberVector<uint8_t>(uint8_array));
+	if (!Storage::named_blobs.contains(name)){
+		const std::vector<uint8_t>& temp = emscripten::convertJSArrayToNumberVector<uint8_t>(uint8_array);
+		Storage::named_blobs.emplace(
+			name, 
+			std::vector<std::byte>((const std::byte*)(temp.data()), (const std::byte*)(temp.data()+temp.size()))
+		);
 	}
 	
 	std::vector<std::byte>* raw_data_ptr;
 	
+	LOG_DEBUG("Open Once");
 	TIFF* tptr = TIFF_open(name, "rm");
-	raw_data_ptr = &(Storage::BlobMgr::get(name));
+	raw_data_ptr = &(Storage::named_blobs.at(name));
 	LOGV_DEBUG(raw_data_ptr);
 	LOGV_DEBUG(*raw_data_ptr);
 	
+	LOG_DEBUG("Close");
 	TIFF_close(name); // ERROR: For some reason this changes the stored data
-	raw_data_ptr = &(Storage::BlobMgr::get(name));
+	raw_data_ptr = &(Storage::named_blobs.at(name));
 	LOGV_DEBUG(raw_data_ptr);
 	LOGV_DEBUG(*raw_data_ptr);
 	
+	LOG_DEBUG("Open Again");
 	tptr = TIFF_open(name, "rm");
-	raw_data_ptr = &(Storage::BlobMgr::get(name));
+	raw_data_ptr = &(Storage::named_blobs.at(name));
 	LOGV_DEBUG(raw_data_ptr);
 	LOGV_DEBUG(*raw_data_ptr);
 	

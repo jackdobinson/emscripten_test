@@ -1,9 +1,9 @@
 #ifndef __TIFF_HELPER_INCLUDED__
 #define __TIFF_HELPER_INCLUDED__
 
+#include <vector>
 #include "tiffio.h"
 #include "file_like.hpp"
-#include <vector>
 #include "logging.h"
 #include "emscripten/val.h"
 #include "storage.hpp"
@@ -28,6 +28,18 @@ bool TIFF_uses_tiles(TIFF* tptr);
 
 TIFF* TIFF_open(const std::string& name, const char* mode);
 void TIFF_close(const std::string& name);
+
+struct TIFF_Ptr{
+	// Attempts to get a TIFF* pointer, first by looking for a valid stored pointer,
+	// second by opening a stored file. Will release the pointer when going out of scope.
+	std::string name;
+	TIFF* p;
+	bool should_close;
+	
+	TIFF_Ptr(const std::string& _name, const char* mode="r+m");
+	~TIFF_Ptr();
+	operator TIFF*()const;
+};
 
 struct TIFF_TileInfo{
 	size_t n_tiles;
@@ -89,6 +101,19 @@ std::vector<T> TIFF_doubles_to_samples_as(
 		double max_pack_value
 	){
 	GET_LOGGER;
+	LOG_DEBUG("Converting greyscale doubles to format we can write to TIFF file...");
+	LOGV_DEBUG(
+		pixel_info.planar_config,
+		pixel_info.samples_per_pixel,
+		pixel_info.uses_strips,
+		pixel_info.uses_tiles,
+		pixel_info.bits_per_sample,
+		pixel_info.sample_format,
+		pixel_info.min_sample_value,
+		pixel_info.max_sample_value
+	);
+	LOGV_DEBUG(typeid(T).name());
+	
 	size_t n_samples = pixel_info.samples_per_pixel*data.size();
 	std::vector<T> sample_data(n_samples);
 	
@@ -136,8 +161,17 @@ void TIFF_write_strips_from(
 		const std::vector<T>& sample_data
 	){
 	
-	for(size_t i=0; i<layout_info.n_items; ++i){
-		TIFFWriteEncodedStrip(tptr, i, const_cast<void *>(static_cast<const void*>(sample_data.data()+i*layout_info.item_size)), layout_info.item_size);
+	std::byte* data = (std::byte*)(sample_data.data());
+	std::byte* data_end = (std::byte*)(sample_data.data()+sample_data.size());
+	
+	// Should have the same number of bytes in our sample data as we expect to write
+	assert((data_end - data) == (layout_info.n_items * layout_info.item_size));
+	
+	size_t i=0;
+	while(data < data_end){
+		TIFFWriteEncodedStrip(tptr, i, data, layout_info.item_size);
+		data += layout_info.item_size;
+		++i;
 	}
 }
 
@@ -149,6 +183,12 @@ void TIFF_write_strips(
 		const std::vector<T>& data // always greyscale, 1 value per pixel
 	){
 	GET_LOGGER;
+	LOG_DEBUG("Writing strips to file...");
+	LOGV_DEBUG(
+		layout_info.n_items,
+		layout_info.item_size,
+		layout_info.rows_per_item
+	);
 	// NOTE: Only greyscale input data is supported
 	
 	switch (pixel_info.sample_format[0]) {
@@ -297,31 +337,31 @@ std::span<uint8_t> TIFF_bytes_like(
 		const std::vector<T>& data
 	){
 	GET_LOGGER;
+	LOGV_DEBUG(data.size());
 	// Create a TIFF with as much of the same structure as `original_file_name` as possible
 	
-	// Get the raw data of the original file
-	std::vector<std::byte>& original_file_raw_data = Storage::BlobMgr::get(original_file_name);
+	// Copy original file data to new file
+	Storage::named_blobs[file_name] = Storage::named_blobs.at(original_file_name);
 	
-	// Copy original file data to new location, the copy will be altered in this function
-	Storage::BlobMgr::store_named(file_name, original_file_raw_data);	
+	// Open as read and write
+	TIFF* tptr = TIFF_open(file_name, "r+m");
 	
-	TIFF* original_tptr = TIFF_open(original_file_name, "rm");
-	
-	if (!TIFF_uses_strips(original_tptr)){
+	if (!TIFF_uses_strips(tptr)){
 		LOG_ERROR("Only TIFF files that use strips are supported at the moment. Exiting...");
 		std::exit(EXIT_FAILURE);
 	}
 	
-	// Get pixel format etc. for original file
-	TIFF_ImageShape original_image_shape(original_tptr);
-	TIFF_PixelInfo original_pixel_info(original_tptr);
-	TIFF_LayoutInfo original_layout_info;
+	// Get pixel format etc.
+	LOG_DEBUG("Getting image shape, pixel info, layout info, etc. of original image");
+	TIFF_ImageShape image_shape(tptr);
+	TIFF_PixelInfo pixel_info(tptr);
+	TIFF_LayoutInfo layout_info;
 	
-	if(original_pixel_info.uses_strips){
-		original_layout_info.fill_from(TIFF_StripInfo(original_tptr));
+	if(pixel_info.uses_strips){
+		layout_info.fill_from(TIFF_StripInfo(tptr));
 	}
-	else if (original_pixel_info.uses_tiles){
-		original_layout_info.fill_from(TIFF_TileInfo(original_tptr));
+	else if (pixel_info.uses_tiles){
+		layout_info.fill_from(TIFF_TileInfo(tptr));
 	}
 	else {
 		LOG_ERROR("Unknown if TIFF uses tile or strip layout. This should never happen");
@@ -329,28 +369,25 @@ std::span<uint8_t> TIFF_bytes_like(
 	}
 	
 	// update min and max sample values
-	for (size_t i=0; i<original_pixel_info.samples_per_pixel; ++i){
+	for (size_t i=0; i<pixel_info.samples_per_pixel; ++i){
 		LOGV_DEBUG(du::min(data));
 		LOGV_DEBUG(du::max(data));
 		LOGV_DEBUG(du::sum(data));
-		original_pixel_info.min_sample_value[i] = du::min(data);
-		original_pixel_info.max_sample_value[i] = du::max(data);
+		pixel_info.min_sample_value[i] = du::min(data);
+		pixel_info.max_sample_value[i] = du::max(data);
 	}
-	
-	
-	TIFF* tptr = TIFF_open(file_name, "r+m");
 	
 	
 	// Write new data into copied file.
-	if(original_pixel_info.uses_strips){
+	if(pixel_info.uses_strips){
 		TIFF_write_strips(
 			tptr,
-			original_layout_info,
-			original_pixel_info,
+			layout_info,
+			pixel_info,
 			data
 		);
 	}
-	else if (original_pixel_info.uses_tiles){
+	else if (pixel_info.uses_tiles){
 		LOG_ERROR("TIFF tile layout unsupported");
 		exit(EXIT_FAILURE);
 	}
@@ -363,9 +400,9 @@ std::span<uint8_t> TIFF_bytes_like(
 	TIFF_close(file_name);
 	
 	// Get the written file as a span of uint8_t
-	std::span<uint8_t> ret = Storage::BlobMgr::get_as<uint8_t>(file_name);
+	std::vector<std::byte>& raw_data = Storage::named_blobs[file_name];
 
-	return ret;
+	return std::span<uint8_t>((uint8_t*)(raw_data.data()), (uint8_t*)(raw_data.data()+raw_data.size()));
 }
 
 

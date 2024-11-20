@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <fstream>
 #include <chrono>
+#include <ranges>
 
 #include "logging.h"
 #include "str_printf.h"
@@ -130,6 +131,22 @@ namespace data_utils{
 		for(size_t i=0;i<a.size(); ++i){
 			a[i] = func(a[i]);
 		}
+	}
+	
+	// COMPARISON
+	
+	template<class T1, class T2>
+	bool is_identical(const std::vector<T1>& a, const std::vector<T2> b){
+		// Test if numerically identical
+		if (a.size() != b.size()){
+			return false;
+		}
+		for(size_t i=0; i<a.size(); ++i){
+			if (a[i] != b[i]){
+				return false;
+			}
+		}
+		return true;
 	}
 
 	// ARRAY MASKING
@@ -489,7 +506,8 @@ namespace data_utils{
 		GET_LOGGER;
 		size_t a_n_px = product(a_shape);
 		size_t b_n_px = product(b_shape);
-		assert(a_n_px <= b_n_px);
+		
+		// Ensure we have the same number of dimensions in our data
 		assert((a_shape.size() == b_shape.size()) && (a_shape.size() < (short)(-1)));
 
 		size_t j_f = index_nd_to_1d(a_shape, a_fpixel); // index of first pixel in a
@@ -597,6 +615,18 @@ namespace data_utils{
 			const std::vector<T2>& original_shape, 
 			const std::vector<T3>& new_shape
 		){
+		GET_LOGGER;
+		LOGV_DEBUG(data.size(), original_shape, new_shape);
+		
+		// only operate on things with the same number of dimensions
+		assert(original_shape.size() == new_shape.size());
+		
+		if(is_identical(original_shape, new_shape)){
+			LOG_WARN("data_utils::reshape. Input shapes are identical: % and %. Skipping operation and returning copy.", original_shape, new_shape);
+			return data;
+		}
+		
+		
 		std::vector<size_t> fpixel_data(original_shape.size(), 0);
 		std::vector<size_t> fpixel_reshaped_data(new_shape.size(), 0);
 		size_t new_size = product(new_shape);
@@ -604,6 +634,7 @@ namespace data_utils{
 		
 		
 		copy_to_rect(data, reshaped_data, original_shape, new_shape, fpixel_data, fpixel_reshaped_data);
+		LOGV_DEBUG(reshaped_data.size());
 		return reshaped_data;
 	}
 
