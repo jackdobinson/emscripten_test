@@ -3,7 +3,7 @@
 
 class WasmDataDownloader{
 	constructor(
-			filename, // <String> name of the file that will be downloaded, e.g. "image.jpg"
+			filename, // <String> or <Callable()->String> Name of the file that will be downloaded, e.g. "image.jpg"
 			file_id, // <Obj> argument passed to `wasm_data_provider` that enables retrieval of the data we want
 			wasm_data_provider, // <Callable(Obj)->TypedArray> A function that provides the data for the download.
 			mime_type="application/octet-stream" // <String>
@@ -35,7 +35,7 @@ class WasmDataDownloader{
 		const url = window.URL.createObjectURL(blob)
 		
 		a.href=url
-		a.download = this.filename
+		a.download = typeof(this.filename) == "function" ? this.filename() : this.filename
 		a.click() // make the element perform its download
 		
 		window.URL.revokeObjectURL(url)

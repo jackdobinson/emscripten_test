@@ -48,7 +48,19 @@ const std::string& deconv_type,
 download_clean_map_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 
-		"clean_map.tiff", 
+		()=>{
+			let fn = ""
+			let ext = ".tiff"
+			if(sci_image_holder.file.name.endsWith(".tiff")){
+				fn = sci_image_holder.file.name.slice(0,-5)+"_"
+			}
+			else if (sci_image_holder.file.name.endsWith(".tif")){
+				fn = sci_image_holder.file.name.slice(0,-4)+"_"
+				ext = ".tif"
+			}
+			
+			return fn+"deconvolved_clean_map" + ext
+		},
 		"deconv.clean_map", 
 		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
 	)
@@ -57,7 +69,19 @@ download_clean_map_button.addEventListener(
 download_residual_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 
-		"residual.tiff", 
+		()=>{
+			let fn = ""
+			let ext=".tiff"
+			if(sci_image_holder.file.name.endsWith(".tiff")){
+				fn = sci_image_holder.file.name.slice(0,-5)+"_"
+			}
+			else if (sci_image_holder.file.name.endsWith(".tif")){
+				fn = sci_image_holder.file.name.slice(0,-4)+"_"
+				ext = ".tif"
+			}
+			
+			return fn+"deconvolved_residual"+ext
+		},
 		"deconv.residual", 
 		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
 	)
