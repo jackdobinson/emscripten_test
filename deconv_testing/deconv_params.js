@@ -117,6 +117,7 @@ class TypeRegistry{
 
 TypeRegistry.add(
 	new DataType("integer", "A whole number between -inf and +inf", (o)=>((typeof(o)=="number") && Number.isInteger(o))),
+	new DataType("integer(1,inf)", "A whole number between 1 and +inf", (o)=>((typeof(o)=="number") && Number.isInteger(o) && (o>=1))),
 	new DataType("real", "A real number between -inf and +inf", (o)=>(typeof(o)=="number")),
 	new DataType("real(0,1)", "A real number in the interval (0, 1)", (o)=>((typeof(o)=="number")&&(0<o)&&(o<1))),
 	new DataType("bool", "A boolean that can be one of {true, false}", (o)=>(typeof(o)=="boolean")),
@@ -147,8 +148,8 @@ class Parameter{
 	}
 	
 	validate(value){
-		is_validated = true
-		is_validated &&= TypeRegistry.get_by_name(this.type_name).valiate(value)
+		let is_validated = true
+		is_validated &&= TypeRegistry.get_by_name(this.type_name).validate(value)
 		is_validated &&= this.validator(value)
 		return is_validated
 	}
@@ -160,12 +161,14 @@ class Parameter{
 
 
 class Control{
-	constructor(html_container, input_element, label_element, value_getter, deserialiser){
+	constructor(html_container, input_element, label_element, value_getter, deserialiser, validator){
 		this.html_container = html_container
 		this.input_element = input_element
 		this.label_element = label_element
 		this.value_getter = value_getter
 		this.deserialiser = deserialiser
+		console.log("xxx", validator)
+		this.validator = validator
 	}
 	
 	addEventListener(type, listener, ...args){
@@ -178,6 +181,10 @@ class Control{
 	
 	getValue(){
 		return this.deserialiser(this.value_getter(this.input_element))
+	}
+	
+	validate(){
+		return this.validator(this.getValue())
 	}
 }
 
@@ -200,7 +207,7 @@ class ControlManager{
 		return ControlManager.set_attributes_of(html_element, attributes)
 	}
 	
-	static create_control(type, attributes, value_getter, deserialiser){
+	static create_control(type, attributes, value_getter, deserialiser, validator){
 		let html_element = document.createElement('div')
 		ControlManager.set_attributes_of(html_element, {class:'param-control'})
 		
@@ -220,7 +227,7 @@ class ControlManager{
 		
 		html_element.append(label_element, input_element)
 		
-		return new Control(html_element, input_element, label_element, value_getter, deserialiser)
+		return new Control(html_element, input_element, label_element, value_getter, deserialiser, validator)
 	}
 	
 	static create_control_for(param){
@@ -230,13 +237,35 @@ class ControlManager{
 		//console.log(param)
 		
 		switch(param.type_name){
+			case "integer(1,inf)":
+				input_type = "number"
+				ctl = ControlManager.create_control(
+					input_type,
+					{id:param.name, min:1, step:1, value:when_null(param.default_value,1), class:`param-${param.type_name}`}, 
+					(x)=>x.value, 
+					param.deserialiser, 
+					param.validate.bind(param)
+				)
+				break
 			case "integer":
 				input_type = "number"
-				ctl = ControlManager.create_control(input_type,{id:param.name, value:when_null(param.default_value,0), class:`param-${param.type_name}`}, (x)=>x.value, param.deserialiser)
+				ctl = ControlManager.create_control(
+					input_type,
+					{id:param.name, step:1, value:when_null(param.default_value,0), class:`param-${param.type_name}`}, 
+					(x)=>x.value, 
+					param.deserialiser, 
+					param.validate.bind(param)
+				)
 				break
 			case "bool":
 				input_type = "checkbox"
-				ctl = ControlManager.create_control(input_type, {id:param.name, value:param.name, class:`param-${param.type_name}`}, (x)=>x.checked, param.deserialiser)
+				ctl = ControlManager.create_control(
+					input_type, 
+					{id:param.name, value:param.name, class:`param-${param.type_name}`}, 
+					(x)=>x.checked, 
+					param.deserialiser, 
+					param.validate.bind(param)
+				)
 				if (not_null(param.default_value) && param.default_value){
 					ctl.input_element.checked=true
 				} else {
@@ -246,11 +275,23 @@ class ControlManager{
 				break
 			case "real(0,1)":
 				input_type = "number"
-				ctl = ControlManager.create_control(input_type, {id:param.name, min:0, max:1, step:0.01, value:when_null(param.default_value,0.5), class:`param-${param.type_name}`}, (x)=>x.value, param.deserialiser)
+				ctl = ControlManager.create_control(
+					input_type, 
+					{id:param.name, min:0, max:1, step:0.01, value:when_null(param.default_value,0.5), class:`param-${param.type_name}`}, 
+					(x)=>x.value, 
+					param.deserialiser, 
+					param.validate.bind(param)
+				)
 				break
 			case "real":
 				input_type = "number"
-				ctl = ControlManager.create_control(input_type, {id:param.name, value:when_null(param.default_value,0), class:`param-${param.type_name}`}, (x)=>x.value, param.deserialiser)
+				ctl = ControlManager.create_control(
+					input_type, 
+					{id:param.name, value:when_null(param.default_value,0), class:`param-${param.type_name}`}, 
+					(x)=>x.value, 
+					param.deserialiser,
+					param.validate.bind(param)
+				)
 				break
 			default:
 				assert(false, `Unknown param type '${param.type_name}' to make control for`)
@@ -260,6 +301,7 @@ class ControlManager{
 		
 		assert_not_null(ctl)
 		
+		// Set tooltips for controls
 		ctl.html_container.classList.add("has-tooltip")
 		
 		ctl.label_element.textContent = param.name
@@ -271,6 +313,26 @@ class ControlManager{
 		ctl.html_container.appendChild(tooltip_element)
 		ctl.tooltip_element = tooltip_element
 		
+		// Set validator tips
+		let validator_tip_element = document.createElement("p")
+		validator_tip_element.classList.add("validator-tip")
+		validator_tip_element.textContent = "Value should be " + TypeRegistry.get_by_name(param.type_name).description.toLowerCase()
+		
+		ctl.html_container.appendChild(validator_tip_element)
+		ctl.validator_tip_element = validator_tip_element
+		
+		// Set validators for controls
+		ctl.html_container.classList.add("has-validator")
+		ctl.html_container.setAttribute("validated", "unknown")
+		ctl.addEventListener("change", (e)=>{
+				if (ctl.validate()){
+					ctl.html_container.setAttribute("validated", "true")
+				} else {
+					ctl.html_container.setAttribute("validated", "false")
+				}
+			}
+		)
+		
 		return ctl
 	}
 }
@@ -279,7 +341,7 @@ class CleanModifiedParameters{
 	static n_iter = new Parameter(
 		'n_iter', 
 		'Maximum number of iterations to perform. A good starting number is 100', 
-		'integer', 
+		'integer(1,inf)', 
 		Number, 
 		10
 	)
@@ -362,11 +424,9 @@ class CleanModifiedParameters{
 		)
 		
 		// Add event listeners here
-		
+
 		this.adaptive_threshold_flag_ctl.addEventListener("change", (e)=>{
-				//console.log("CleanModifiedParameters::EventListener::change", e.target)
 				this.threshold_ctl.input_element.disabled = e.target.checked
-				//console.log(this.threshold_ctl.input_element)
 			}
 		)
 		
@@ -378,6 +438,17 @@ class CleanModifiedParameters{
 	
 	set_params(deconv_type, deconv_name){
 		console.log(deconv_type, deconv_name)
+		
+		assert(this.n_iter_ctl.validate())
+		assert(this.loop_gain_ctl.validate())
+		assert(this.adaptive_threshold_flag_ctl.validate())
+		assert(this.threshold_ctl.validate())
+		assert(this.clean_beam_sigma_ctl.validate())
+		assert(this.add_residual_flag_ctl.validate())
+		assert(this.rms_frac_threshold_ctl.validate())
+		assert(this.fabs_frac_threshold_ctl.validate())
+		
+		
 		console.log(
 			this.n_iter_ctl.getValue(),
 			0, //n_positive_iter

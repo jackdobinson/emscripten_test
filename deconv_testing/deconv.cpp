@@ -1,5 +1,12 @@
 #include "deconv.hpp"
 
+// TODO:
+// * [DONE] Write code to center PSF on brightest pixel/center of brightness
+// * Add hooks/callbacks so I can update things after each iteration/at specific points in processing
+// * Add user feedback for bad values in input parameters
+// * Extend grey-out for non-usable parameters to name of parameter as well as value setter
+// * Put onto proper repository site as a page.
+// * Communicate how brightnesses of produed images relate to original file
 
 using namespace emscripten;
 
@@ -23,6 +30,23 @@ EM_JS(void, send_to_js_canvas, (void* ptr, int size, int width, int height), {
 	scratch_canvas_ctx.putImageData(im_data, 0, 0);
 });
 
+
+EM_JS(void, send_to_named_js_canvas, (const char* name, void* ptr, int size, int width, int height), {
+	let canvas_id = UTF8ToString(name);
+	console.log("EM_JS: Sending image to canvas ", canvas_id);
+	console.log(ptr, size, width, height);
+	let named_canvas = document.getElementById(canvas_id);
+	console.log("EM_JS: named canvas", named_canvas);
+	let im_data = new ImageData(new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, size), width, height);
+	console.log("EM_JS: got image data");
+	named_canvas.width = width;
+	named_canvas.height = height;
+	console.log("EM_JS: getting canvas context");
+	let named_canvas_ctx = named_canvas.getContext("2d");
+	named_canvas_ctx.imageSmoothingEnabled = false;
+	named_canvas_ctx.putImageData(im_data, 0, 0);
+	console.log("EM_JS: Image data written");
+});
 
 EM_JS(void, update_js_plot, (const char* name, void* ptr, int size), {
 	name = UTF8ToString(name);
@@ -115,7 +139,11 @@ void CleanModifiedAlgorithm::_get_residual_from_obs(const std::vector<double>& o
 	du::set_at_mask(residual_data, obs_nan_mask, 0.0);
 }
 
-void CleanModifiedAlgorithm::_get_padded_psf(const std::vector<double>& psf_data, const std::vector<size_t>& obs_shape, const std::vector<size_t>& psf_shape){
+void CleanModifiedAlgorithm::_get_padded_psf(
+		const std::vector<double>& psf_data, 
+		const std::vector<size_t>& psf_shape,
+		const std::string& centering_mode = "center_of_brightness"
+	){
 	GET_LOGGER;
 
 	// zero the array that will hold our result
@@ -125,19 +153,19 @@ void CleanModifiedAlgorithm::_get_padded_psf(const std::vector<double>& psf_data
 	std::vector<size_t> psf_fpixel(psf_shape.size(),0); // from (0,0)
 
 	// define the first pixel that psf data will be written to
-	std::vector<size_t> psf_fpixel_obs(obs_shape);
+	std::vector<size_t> psf_fpixel_obs(data_shape);
 	LOGV_DEBUG(du::multiply(psf_fpixel_obs, 0.5));
 	LOGV_DEBUG(du::multiply(psf_shape, 0.5));
 	du::subtract_inplace(du::multiply_inplace(psf_fpixel_obs, 1./2), du::multiply(psf_shape, 1./2));
-	LOGV_DEBUG(obs_shape);
+	LOGV_DEBUG(data_shape);
 	LOGV_DEBUG(psf_fpixel_obs);
 	LOGV_DEBUG(psf_shape);
 	LOGV_DEBUG(psf_fpixel);
 
 
 	LOG_DEBUG("Copying PSF data to padded array");
-	du::copy_to_rect(psf_data, padded_psf_data, psf_shape, obs_shape, psf_fpixel, psf_fpixel_obs);
-	du::write_as_image(_sprintf("./plots/%psf_padded_before.pgm", tag), padded_psf_data, obs_shape);
+	du::copy_to_rect(psf_data, padded_psf_data, psf_shape, data_shape, psf_fpixel, psf_fpixel_obs);
+	du::write_as_image(_sprintf("./plots/%psf_padded_before.pgm", tag), padded_psf_data, data_shape);
 
 	LOG_DEBUG("Removing NANs from padded_psf_data");
 	// remove NANs from padded_psf_data
@@ -145,6 +173,64 @@ void CleanModifiedAlgorithm::_get_padded_psf(const std::vector<double>& psf_data
 	du::set_at_mask(padded_psf_data, psf_nan_mask, 0.0);
 	du::multiply_inplace(padded_psf_data, 1.0/du::sum(padded_psf_data));
 
+
+	// TESTING CENTERING OF NON_CENTERED PSF
+	//du::shift_inplace(padded_psf_data, data_shape, std::vector<size_t>({100,200}));
+	//const std::span<std::byte>& temp1 = image_as_blob("padded_psf_data", padded_psf_data);
+	//send_to_named_js_canvas(
+	//	std::string("uncentered-psf-canvas").c_str(), 
+	//	temp1.data(), 
+	//	temp1.size(), 
+	//	data_shape[0], 
+	//	data_shape[1]
+	//);
+
+
+	std::vector<int> center_offset_nd_idx(data_shape.size(), 0);
+	
+	if(centering_mode == ""){
+		LOG_INFO("No centering of PSF will be performed.");
+	}
+	if(centering_mode == "center_of_brightness"){
+		LOG_INFO("Centering PSF by center of brightness");
+		center_offset_nd_idx = du::subtract(
+			du::as_type<int>(du::ratio(data_shape, 2)),
+			du::as_type<int>(du::idx_moment_1(padded_psf_data, data_shape))
+		);
+	}
+	else if(centering_mode == "brightest_pixel"){
+		LOG_INFO("Centering PSF by brightest pixel");
+		size_t center_offset_1d_idx = du::idx_max(padded_psf_data);
+		center_offset_nd_idx = du::subtract(
+			du::as_type<int>(du::ratio(data_shape, 2)),
+			du::as_type<int>(du::index_1d_to_nd(data_shape, center_offset_1d_idx))
+		);
+	}
+	else {
+		LOG_ERROR("");
+	}
+	LOGV_DEBUG(center_offset_nd_idx);
+
+	// If there is no shift from the center, don't bother
+	if (!du::is_identical(center_offset_nd_idx, du::zeros<int>(center_offset_nd_idx.size()))){
+		du::shift_inplace(
+			padded_psf_data, 
+			data_shape, 
+			center_offset_nd_idx
+		);
+	}
+
+	const std::span<std::byte>& temp2 = image_as_blob("padded_psf_data", padded_psf_data);
+	send_to_named_js_canvas(
+		std::string("adjusted-psf-canvas").c_str(), 
+		temp2.data(), 
+		temp2.size(), 
+		data_shape[0], 
+		data_shape[1]
+	);
+	
+	
+	
 	LOG_DEBUG("Adjusted padded_psf_data for convolution centering");
 	// Re-center the padded_psf_data so that the convolution in "run()" 
 	// is performed in the correct way.
@@ -175,7 +261,7 @@ void CleanModifiedAlgorithm::_get_padded_psf(const std::vector<double>& psf_data
 		scratch_canvas_ctx.imageSmoothingEnabled = false;
 		console.log(`${scratch_canvas_ctx.imageSmoothingEnabled}`);
 		scratch_canvas_ctx.putImageData(im_data, 0, 0);
-	)}, temp.data(), temp.size(), obs_shape[0], obs_shape[1]);
+	)}, temp.data(), temp.size(), data_shape[0], data_shape[1]);
 	*/
 	
 }
@@ -279,7 +365,7 @@ std::pair<std::vector<double>, std::vector<size_t>> CleanModifiedAlgorithm::_ens
 	GET_LOGGER;
 	
 	LOG_DEBUG("Ensuring odd shape of input data");
-	
+	LOGV_DEBUG(obs_shape);
 	
 	data_shape_adjustment.resize(obs_shape.size());
 	for(size_t i=0; i<obs_shape.size(); ++i){
@@ -370,12 +456,12 @@ void CleanModifiedAlgorithm::prepare_observations(
 
 	
 	tag=run_tag;
+	data_shape_adjustment.resize(input_obs_shape.size());
 	
-	auto [obs_data, obs_shape] = _ensure_odd(input_obs_data, input_obs_shape);
+	auto [adjusted_obs_data, adjusted_obs_shape ] = _ensure_odd(input_obs_data, input_obs_shape);
 	
-	data_shape = obs_shape;
+	data_shape = adjusted_obs_shape;
 	data_size = du::product(data_shape);
-	data_shape_adjustment.resize(data_shape.size());
 
 	LOG_DEBUG("resize dynamic arrays");
 	// resize arrays to hold desired data
@@ -404,10 +490,10 @@ void CleanModifiedAlgorithm::prepare_observations(
 	LOG_DEBUG("backward fft attributes set");
 
 	LOG_DEBUG("Getting residual from obs_data");
-	_get_residual_from_obs(obs_data, data_shape);
+	_get_residual_from_obs(adjusted_obs_data, data_shape);
 
 	LOG_DEBUG("Padding PSF data");
-	_get_padded_psf(input_psf_data, data_shape, input_psf_shape);
+	_get_padded_psf(input_psf_data, input_psf_shape);
 		
 	LOG_DEBUG("precompute PSF FFT");
 	// get the FFT of the PSF, will need it later

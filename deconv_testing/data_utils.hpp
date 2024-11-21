@@ -51,6 +51,18 @@ namespace template_utils{
 
 namespace data_utils{
 
+	// CREATION ROUTINES
+	
+	template<class T>
+	std::vector<T> zeros(size_t n){
+		return std::vector<T>(n, 0);
+	}
+	
+	template<class T>
+	std::vector<T> ones(size_t n){
+		return std::vector<T>(n, 1);
+	}
+
 	// MEMBERSHIP TESTS
 	
 	template<class T>
@@ -62,6 +74,91 @@ namespace data_utils{
 		}
 		return false;
 	}
+
+	// ASSIGNMENT
+	template<class T, class U>
+	std::vector<T>& fill(std::vector<T>& a, const U& v){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] = v;
+		}
+		return (a);
+	}
+	
+
+	// SUBTRACT ARRAYS
+
+	template<class T1, class T2>
+	std::vector<T1>& subtract_inplace(std::vector<T1>& a, const std::vector<T2>& b){
+		assert(a.size() == b.size());
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] -= b[i];
+		}
+		return(a);
+	}
+	template<class T1, class T2>
+	std::vector<T1>& subtract_inplace(std::vector<T1>& a, const T2 v){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] -= v;
+		}
+		return(a);
+	}
+
+	template<class T1, class T2>
+	std::vector<T1> subtract(const std::vector<T1>& a, const std::vector<T2>& b){
+		assert(a.size() == b.size());
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i]-b[i];
+		}
+		return(r);
+	}
+
+	template<class T1, class T2>
+	std::vector<T1> subtract(const std::vector<T1>& a, const T2 v){
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i]-v;
+		}
+		return(r);
+	}
+
+	// ADD ARRAYS
+
+	template<class T1, class T2>
+	std::vector<T1>& add_inplace(std::vector<T1>& a, const std::vector<T2>& b){
+		assert(a.size() == b.size());
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] += b[i];
+		}
+		return(a);
+	}
+	template<class T1, class T2>
+	std::vector<T1>& add_inplace(std::vector<T1>& a, const T2 v){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] += v;
+		}
+		return(a);
+	}
+
+	template<class T1, class T2>
+	std::vector<T1> add(const std::vector<T1>& a, const std::vector<T2>& b){
+		assert(a.size() == b.size());
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i]+b[i];
+		}
+		return(r);
+	}
+
+	template<class T1, class T2>
+	std::vector<T1> add(const std::vector<T1>& a, const T2 v){
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i]+v;
+		}
+		return(r);
+	}
+	
 
 	// MULTIPLY ARRAYS
 
@@ -111,6 +208,113 @@ namespace data_utils{
 			a[i] *= v;
 		}
 		return(a);
+	}
+
+	// RATIO ARRAYS
+	template<class T1, class T2>
+	std::vector<T1>  ratio(const std::vector<T1>& a, const std::vector<T2> b){
+		assert(a.size() == b.size());
+		std::vector<T1> r(a.size());
+
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i] / b[i];
+		}
+		return(r);
+	}
+
+	template<class T1, class T2>
+	std::vector<T1>  ratio(const std::vector<T1>& a, const T2 v){
+		std::vector<T1> r(a.size());
+
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i] / v;
+		}
+		return(r);
+	}
+	
+	template<class T1, class T2>
+	std::vector<T1>  ratio(const T2 v, const std::vector<T1>& a){
+		std::vector<T1> r(a.size());
+
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = v / a[i];
+		}
+		return(r);
+	}
+	
+	template<class T1, class T2>
+	std::vector<T1>& ratio_inplace(std::vector<T1>& a, const std::vector<T2> b){
+		assert(a.size() == b.size());
+
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] /= b[i];
+		}
+		return(a);
+	}
+	template<class T1, class T2>
+	std::vector<T1>& ratio_inplace(std::vector<T1>& a, const T2 v){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] /= v;
+		}
+		return(a);
+	}
+	
+	template<class T1, class T2>
+	std::vector<T1>& ratio_inplace(const T2 v, std::vector<T1>& a){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] = v / a[i];
+		}
+		return(a);
+	}
+	
+	// MODULO ARRAYS
+	
+	template<class T1, class T2>
+	std::vector<T1>& modulo_inplace(std::vector<T1>& a, const std::vector<T2>& b){
+		assert(a.size() == b.size());
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] %= b[i];
+		}
+		return(a);
+	}
+	template<class T1, class T2>
+	std::vector<T1>& modulo_inplace(std::vector<T1>& a, const T2 v){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] %= v;
+		}
+		return(a);
+	}
+	template<class T1, class T2>
+	std::vector<T1>& modulo_inplace(const T2 v, std::vector<T1>& a){
+		for(size_t i=0; i<a.size(); ++i){
+			a[i] = v % a[i];
+		}
+		return(a);
+	}
+	template<class T1, class T2>
+	std::vector<T1> modulo(const std::vector<T1>& a, const std::vector<T2>& b){
+		assert(a.size() == b.size());
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i]%b[i];
+		}
+		return(r);
+	}
+	template<class T1, class T2>
+	std::vector<T1> modulo(const std::vector<T1>& a, const T2 v){
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = a[i]%v;
+		}
+		return(r);
+	}
+	template<class T1, class T2>
+	std::vector<T1> modulo(const T2 v, const std::vector<T1>& a){
+		std::vector<T1> r(a.size());
+		for(size_t i=0; i<a.size(); ++i){
+			r[i] = v%a[i];
+		}
+		return(r);
 	}
 
 	// APPLY FUNCTION TO ARRAYS
@@ -181,7 +385,7 @@ namespace data_utils{
 		}
 	}
 
-	// Invert Arry Mask
+	// Invert Array Mask
 	template<class M>
 	void mask_invert(std::vector<M> mask){
 		for (auto item : mask){
@@ -242,6 +446,19 @@ namespace data_utils{
 		}
 		return(accumulator);
 	}
+	
+	template<class T>
+	T sum(const std::vector<T>& a){
+		// Add up all elements in array
+		T sum=0;
+		for(auto item : a){
+			sum += item;
+		}
+		return(sum);
+	}
+
+	
+	// SINGLE INDEX SELECTORS
 
 	template<class T>
 	size_t idx_max(const std::vector<T>& a){
@@ -257,6 +474,9 @@ namespace data_utils{
 		return(idx);
 	}
 
+
+	// SINGLE ELEMENT SELECTORS
+	
 	template<class T>
 	T max(const std::vector<T>& a){
 		// Find max element of array using ">" operator
@@ -323,15 +543,7 @@ namespace data_utils{
 		return(min_value);
 	}
 
-	template<class T>
-	T sum(const std::vector<T>& a){
-		// Add up all elements in array
-		T sum=0;
-		for(auto item : a){
-			sum += item;
-		}
-		return(sum);
-	}
+	
 
 	// SET ARRAY ELEMENTS
 
@@ -383,18 +595,74 @@ namespace data_utils{
 		}
 		return(r);
 	}
+	template <class T, class U>
+	std::vector<T> cumulative_modulo(const U v, const std::vector<T>& a){
+		// (567, {300, 30, 10})
+		// 567 % 300 = 267
+		// 267 % 30 = 27
+		// 27 % 10 = 7
+		std::vector<T> r(a);
+		r[0] = v%a[0];
+		
+		for(size_t i=1; i<r.size(); ++i){
+			r[i] = r[i-1] % r[i];
+		}
+		return(r);
+	}
+	template <class T, class U>
+	std::vector<T> cumulative_modulo_inplace(const U v, std::vector<T>& a){
+		// (567, {300, 30, 10})
+		// 567 % 300 = 267
+		// 267 % 30 = 27
+		// 27 % 10 = 7
+		a[0] = v%a[0];
+		
+		for(size_t i=1; i<a.size(); ++i){
+			a[i] = a[i-1] % a[i];
+		}
+		return(a);
+	}
+	template <class T, class U>
+	std::vector<T> cumulative_ratio(U v, const std::vector<T>& a){
+		// (567, {300, 30, 10})
+		// 567 / 300 = 1
+		// 267 / 30 = 8
+		// 27 / 10 = 2
+		std::vector<T> m(cumulative_modulo(v, a));
+		std::vector<T> r(a);
+		r[0] = v/a[0];
+		
+		for(size_t i=1; i<r.size(); ++i){
+			r[i] = m[i-1] / r[i];
+		}
+		return(r);
+	}
+	template <class T, class U>
+	std::vector<T>& cumulative_ratio_inplace(U v, std::vector<T>& a){
+		// (567, {300, 30, 10})
+		// 567 / 300 = 1
+		// 267 / 30 = 8
+		// 27 / 10 = 2
+		std::vector<T> m(cumulative_modulo(v, a));
+		a[0] = v/a[0];
+		
+		for(size_t i=1; i<a.size(); ++i){
+			a[i] = m[i-1] / a[i];
+		}
+		return(a);
+	}
 	
 	// REVERSING
 	
 
 	template <class T>
 	std::vector<T>& reverse_inplace(std::vector<T>& a){
-		GET_LOGGER;
-		LOGV_DEBUG(a);
+		//GET_LOGGER;
+		//LOGV_DEBUG(a);
 		T temp;
 		size_t N = a.size();
 		for(size_t i=0; i<N/2; ++i){
-			LOGV_DEBUG(i, N, N/2);
+			//LOGV_DEBUG(i, N, N/2);
 			temp = a[i];
 			a[i] = a[N-1-i];
 			a[N-1-i] = temp;
@@ -404,10 +672,15 @@ namespace data_utils{
 	
 	template <class T>
 	std::vector<T> reverse(const std::vector<T>& a){
-		std::vector<T> r(a);
-		return(reverse_inplace(r));
+		std::vector<T> r(a.size());
+		for(size_t i=0; i<r.size(); ++i){
+			r[i] = a[a.size()-i-1];
+		}
+		return(r);
 	
 	}
+
+	// SHIFT ARRAYS
 
 	template <class T>
 	std::vector<T>& shift_inplace(std::vector<T>& a, size_t n){
@@ -432,9 +705,7 @@ namespace data_utils{
 		return a;
 	}
 
-	// SHAPES
-	
-	
+	// STRIDES
 	
 	template <class T>
 	std::vector<T> get_strides(const std::vector<T>& shape){
@@ -445,7 +716,93 @@ namespace data_utils{
 		cumulative_product_inplace(strides); // {1, 430, 427*430}
 		return(strides);	
 	}
+	
+	// MULTI INDEX SELECTORS
+	
+	template<class T, class U>
+	std::vector<double> idx_moment_1(const std::vector<T>& a, const std::vector<U>& shape){
+		std::vector<double> temp(shape.size());
+		std::vector<double> idx_moment(shape.size());
+		std::vector<U> reversed_strides = reverse(get_strides(shape));
+		std::vector<U> nd_idx;
+		T sum=0;
+		
+		for(size_t i=0; i<a.size(); ++i){
+			sum += a[i];
+			nd_idx = reversed_strides;
+			reverse_inplace(cumulative_ratio_inplace(i, nd_idx));
+			fill(temp,1);
+			multiply_inplace(temp, nd_idx);
+			multiply_inplace(temp, a[i]);
+			add_inplace(idx_moment, temp);
+		}
+		ratio_inplace(idx_moment, sum);
+		return idx_moment;
+	}
+	
+	// SHIFT N-DIMENSIONAL ARRAYS
+	
+	template <class T, class U, class V>
+	std::vector<T>& shift_inplace(std::vector<T>& a, const std::vector<U>& shape, const std::vector<V>& shift){
+		// shift n-dimensional array along e.g. 
+		// /1,2,3,4\ --> /2,3,4,1\
+		// \5,6,7,8/     \6,7,8,5/
+		GET_LOGGER;
+		LOGV_DEBUG(a, shape, shift);
+		if(shape.size()!=shift.size()){
+			LOG_ERROR("When shifting n-dimensional array in place, shape and shift must have same number of dimensions");
+			exit(EXIT_FAILURE);
+		}
+		
+		std::vector<size_t> positive_shift(shift.size());
+		const std::vector<U> strides = get_strides(shape);
+		//std::vector<size_t> number_of_shifted_elements(ratio(product(shift,cumulative_product(shape)), shape));
+		
+		V t1 = 0;
+		size_t i;
+		size_t j;
+		std::vector<size_t> idx_from(shape.size());
+		std::vector<size_t> idx_to(shape.size());
+		
+		for (i=0;i<shape.size();++i){
+			LOGV_DEBUG(i, shape[i], shift[i]);
+			if (shift[i] < 0){
+				LOG_DEBUG("shift < 0");
+				t1 = shift[i];
+				while (t1 < 0){
+					t1 += shape[i];
+				}
+				positive_shift[i] = t1;
+			}
+			else if(shape[i] <= shift[i]){
+				LOG_DEBUG("shape <= shift");
+				positive_shift[i] = shift[i] % shape[i];
+			}
+			else {
+				LOG_DEBUG("0 <= shift < shape");
+				positive_shift[i] = shift[i];
+			}
+		}
+		LOGV_DEBUG(positive_shift);
+		
+		// Make a copy of the input data
+		std::vector<T> temp(a);
+		
+		for(i=0;i<a.size();++i){
+			// get nd index from 1d index
+			idx_from = reverse(cumulative_ratio(i, reverse(strides)));
+			idx_to = modulo(add(idx_from, positive_shift), shape);
+			j = sum(multiply(idx_to, strides));
+			a[j] = temp[i];
+		}
 
+		
+		return a;
+	}
+
+
+	// SHAPES
+	
 	template<class T1, class T2>
 	size_t index_nd_to_1d(const std::vector<T1>& shape, const std::vector<T2>& idxs){
 		return(sum(multiply(get_strides(shape), idxs)));
@@ -463,7 +820,7 @@ namespace data_utils{
 		return(idxs);
 	}
 
-	template<class T1, class T2, class T3>
+	template<class T1, class T2>
 	size_t index_nd_to_1d_strides(const std::vector<T1>& strides, const std::vector<T2>& idxs){
 		return(sum(multiply(strides, idxs)));
 	}
@@ -478,6 +835,7 @@ namespace data_utils{
 		idxs[0] = idx;
 		return(idxs);
 	}
+	
 
 	// COPYING ARRAYS
 
@@ -491,12 +849,12 @@ namespace data_utils{
 
 	template<class T>
 	void copy_to_rect(
-			const std::vector<T>& a, 
-			std::vector<T>& b, 
-			const std::vector<size_t>& a_shape, 
-			const std::vector<size_t>& b_shape, 
-			const std::vector<size_t>& a_fpixel, 
-			const std::vector<size_t>& a_fpixel_b,
+			const std::vector<T>& a, // source array 
+			std::vector<T>& b, // destination array
+			const std::vector<size_t>& a_shape, // shape of source array
+			const std::vector<size_t>& b_shape, // shape of destination array
+			const std::vector<size_t>& a_fpixel, // first pixel to copy from in source array
+			const std::vector<size_t>& a_fpixel_b, // first pixel to copy to in destination array
 			const int mode=0 //0 - clip, 1 - wrap around
 		){
 		// a - smaller array to copy from
@@ -607,6 +965,8 @@ namespace data_utils{
 		return;
 	}
 
+	
+
 	// RESHAPE ARRAYS
 	
 	template <class T1, class T2, class T3>
@@ -638,67 +998,7 @@ namespace data_utils{
 		return reshaped_data;
 	}
 
-	// SUBTRACT ARRAYS
-
-	template<class T1, class T2>
-	std::vector<T1>& subtract_inplace(std::vector<T1>& a, const std::vector<T2>& b){
-		for(size_t i=0; i<a.size(); ++i){
-			a[i] -= b[i];
-		}
-		return(a);
-	}
-	template<class T1, class T2>
-	std::vector<T1>& subtract_inplace(std::vector<T1>& a, const T2 v){
-		for(size_t i=0; i<a.size(); ++i){
-			a[i] -= v;
-		}
-		return(a);
-	}
-
-	template<class T1, class T2>
-	std::vector<T1> subtract(const std::vector<T1>& a, const std::vector<T2>& b){
-		std::vector<T1> r(a.size());
-		copy_to(a,r);
-		return(subtract_inplace(r, b));
-	}
-
-	template<class T1, class T2>
-	std::vector<T1> subtract(const std::vector<T1>& a, const T2 v){
-		std::vector<T1> r(a.size());
-		copy_to(a,r);
-		return(subtract_inplace(r, v));
-	}
-
-	// ADD ARRAYS
-
-	template<class T1, class T2>
-	std::vector<T1>& add_inplace(std::vector<T1>& a, const std::vector<T2>& b){
-		for(size_t i=0; i<a.size(); ++i){
-			a[i] += b[i];
-		}
-		return(a);
-	}
-	template<class T1, class T2>
-	std::vector<T1>& add_inplace(std::vector<T1>& a, const T2 v){
-		for(size_t i=0; i<a.size(); ++i){
-			a[i] += v;
-		}
-		return(a);
-	}
-
-	template<class T1, class T2>
-	std::vector<T1> add(const std::vector<T1>& a, const std::vector<T2>& b){
-		std::vector<T1> r(a.size());
-		copy_to(a,r);
-		return(add_inplace(r, b));
-	}
-
-	template<class T1, class T2>
-	std::vector<T1> add(const std::vector<T1>& a, const T2 v){
-		std::vector<T1> r(a.size());
-		copy_to(a,r);
-		return(add_inplace(r, v));
-	}
+	
 
 
 

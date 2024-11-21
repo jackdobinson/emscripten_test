@@ -122,9 +122,34 @@ div.v-flow{
 	}
 }
 
+.has-tooltip {
+	position:relative;
+}
 
+.has-validator[validated]{
+	background-color: #EEFFEE;
+	
+	.validator-tip{
+		display:none;
+		position:absolute;
+		z-index:2;
+	}
+}
 
-
+.has-validator[validated=false]{
+	background-color: #FFEEEE;
+	
+	.validator-tip{
+		display:inline-block;
+		background-color: #FFEEEE;
+		top:-2.2rem;
+		margin: 0.5em;
+		padding: 0.2em;
+		border: solid 1px black;
+		left: 100%;
+		width: 30em;
+	}
+}
 
 .has-tooltip {
 	position:relative;

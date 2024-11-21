@@ -15,6 +15,9 @@ let psf_file_picker = document.getElementById("psf_file")
 
 let sci_canvas = document.getElementById("sci_canvas")
 let psf_canvas = document.getElementById("psf_canvas")
+
+let adjusted_psf_canvas = document.getElementById("adjusted-psf-canvas")
+
 let clean_map_canvas = document.getElementById("clean_map_canvas")
 let residual_canvas = document.getElementById("residual_canvas")
 
@@ -135,7 +138,7 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		
 		
 		
-		Module.create_deconvolver(deconv_type, deconv_name)
+		await Module.create_deconvolver(deconv_type, deconv_name)
 
 		clean_modified_params.set_params(deconv_type, deconv_name)
 		// Automatically size the plot for the expected number of iterations
@@ -159,8 +162,13 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		
 		console.log("run_deconv_button.addEventListener::click", Math.log10(clean_modified_params.fabs_frac_threshold_ctl.getValue()))
 
-		console.log("Running deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
-		await Module.run_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")
+		console.log("Preparing deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
+		await Module.prepare_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")
+		
+		
+		console.log("Running prepared deconvolver")
+		await Module.run_deconvolver(deconv_type, deconv_name)
+		
 		deconv_complete = true
 		
 		let width = sci_image_holder.im_w

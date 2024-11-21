@@ -145,7 +145,8 @@ int create_deconvolver(const std::string& deconv_type, const std::string& deconv
 	return 0;
 }
 
-void run_deconvolver(
+
+void prepare_deconvolver(
 		const std::string& deconv_type, 
 		const std::string& deconv_name, 
 		const std::string& sci_image_name, 
@@ -168,6 +169,17 @@ void run_deconvolver(
 		psf_image.shape,
 		run_tag
 	);
+}
+
+void run_deconvolver(
+		const std::string& deconv_type, 
+		const std::string& deconv_name
+	){
+	GET_LOGGER;
+	// get deconvolver
+	// Only one type for now, so use that
+	
+	CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
 	
 	deconvolver.run();
 
@@ -333,6 +345,7 @@ void set_deconvolver_parameters(
 EMSCRIPTEN_BINDINGS(my_module){
 	function("get_tiff", &get_tiff);
 	function("create_deconvolver", &create_deconvolver);
+	function("prepare_deconvolver", &prepare_deconvolver);
 	function("run_deconvolver", &run_deconvolver);
 	function("get_deconvolver_clean_map", &get_deconvolver_clean_map);
 	function("get_deconvolver_residual", &get_deconvolver_residual);

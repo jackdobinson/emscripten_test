@@ -113,7 +113,7 @@ class CleanModifiedAlgorithm {
 	);
 
 	void _get_residual_from_obs(const std::vector<double>& obs_data, const std::vector<size_t>& obs_shape);
-	void _get_padded_psf(const std::vector<double>& psf_data, const std::vector<size_t>& obs_shape, const std::vector<size_t>& psf_shape);
+	void _get_padded_psf(const std::vector<double>& psf_data, const std::vector<size_t>& psf_shape, const std::string& centering_mode);
 	void __str__();
 	void _calc_pixel_threshold();
 	void _select_update_pixels();
