@@ -56,12 +56,14 @@
 							</div>
 						</label>
 						<input type="file" id="sci_file" name="sci_file" style="display: none;">
-						<canvas id="sci_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
-						</canvas>
+						<div class="canvas-container">
+							<canvas id="sci_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+							</canvas>
+						</div>
 					</div>
 				</div>
 
-				<div class="v-flow canvas-container">
+				<div class="v-flow">
 					<div class="item">
 						<label for="psf_file">
 							<div class="button-like">
@@ -69,8 +71,10 @@
 							</div>
 						</label>
 						<input type="file" id="psf_file" name="psf_file" style="display:none;">
-						<canvas id="psf_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
-						</canvas>
+						<div class="canvas-container">
+							<canvas id="psf_canvas" oncontextmenu="event.preventDefault()" tabindex=-1>
+							</canvas>
+						</div>
 					</div>
 				</div>
 			</div>

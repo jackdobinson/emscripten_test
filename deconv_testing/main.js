@@ -127,10 +127,15 @@ plot_name_map.set(
 
 run_deconv_button.addEventListener("click", async (e)=>{
 		if ((sci_image_holder.name === null) || (psf_image_holder.name === null)) {
-			console.log("ERROR: Must have uploaded a science or psf image")
+			alert("ERROR: Missing input data.\n\nDeconvolution requires upload of a science image and a psf image")
 			return
 		}
 
+		let invalid_params = clean_modified_params.validate()
+		if(invalid_params.length != 0){
+			alert(`ERROR: Could not run deconvolution.\n\nThe following parameters are invalid and need to be corrected:\n\t${invalid_params.join("\n\t")}`)
+			return;
+		}
 		
 		deconv_complete = false
 		console.log("Creating deconvolver")
@@ -140,27 +145,32 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		
 		await Module.create_deconvolver(deconv_type, deconv_name)
 
-		clean_modified_params.set_params(deconv_type, deconv_name)
+		// Check for invalid params again when we set the values
+		invalid_params = clean_modified_params.set_params(deconv_type, deconv_name)
+		if(invalid_params.length != 0){
+			alert(`ERROR: Could not run deconvolution.\n\nThe following parameters are invalid and need to be corrected:\n\t${invalid_params.join("\n\t")}`)
+			return;
+		}
+		
 		// Automatically size the plot for the expected number of iterations
-		//plot_name_map.get("fabs_record").current_data_area.setExtent(E.from(0,clean_modified_params.n_iter_ctl.getValue(),0,1))
 		plot_name_map.get("fabs_record").current_data_area.setExtent(
 			E.from(
 				0,
-				clean_modified_params.n_iter_ctl.getValue(),
-				Math.log10(clean_modified_params.fabs_frac_threshold_ctl.getValue()),
+				clean_modified_params.valueOf("n_iter"),
+				Math.log10(clean_modified_params.valueOf("fabs_frac_threshold")),
 				0
 			)
 		)
 		plot_name_map.get("rms_record").current_data_area.setExtent(
 			E.from(
 				0,
-				clean_modified_params.n_iter_ctl.getValue(),
-				Math.log10(clean_modified_params.rms_frac_threshold_ctl.getValue()),
+				clean_modified_params.valueOf("n_iter"),
+				Math.log10(clean_modified_params.valueOf("rms_frac_threshold")),
 				0
 			)
 		)
 		
-		console.log("run_deconv_button.addEventListener::click", Math.log10(clean_modified_params.fabs_frac_threshold_ctl.getValue()))
+		console.log("run_deconv_button.addEventListener::click", Math.log10(clean_modified_params.valueOf("fabs_frac_threshold")))
 
 		console.log("Preparing deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
 		await Module.prepare_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")
@@ -190,14 +200,6 @@ run_deconv_button.addEventListener("click", async (e)=>{
 			width,
 			height
 		)
-
-		// SOMETHING WRONG HERE
-		// For some reason the data send to the canvases
-		// is the same. Despite them being different in here,
-		// and when I send it to a different canvas from inside C++
-		// May be something to do with JS being wierd when it comes
-		// to objects. Maybe I should try splitting up some of this
-		// or making it into a class?
 
 		console.log("deconv_clean_map", deconv_clean_map)
 		console.log("deconv_residual", deconv_residual)

@@ -43,8 +43,11 @@ canvas.emscripten { border: 0px none; background-color: black; }
 }
 
 canvas {
-	width: 100%;
+	width:100%;
+	height: 100%;
 	image-rendering: pixelated;
+	max-width: 100%;
+	max-height: 100%;
 }
 
 #canvas {
@@ -52,13 +55,18 @@ canvas {
 	width : 50%;
 }
 
+.item{
+	width:fit-content;
+	height:fit-content;
+}
 
 div.h-flow{
 	display: flex;
 	flex-flow: row wrap;
 	> * {
 		flex: 1;
-		width: 30%;
+		width: fit-content;
+		height:100%;
 		border-left: 0.1rem solid black;
 		padding-left: 1rem;
 		padding-right: 1rem;
@@ -172,7 +180,7 @@ div.v-flow{
 }
 
 div.canvas-container{
-	width: 40%;
+	width:100%;
 }
 
 .button-like {

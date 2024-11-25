@@ -338,143 +338,147 @@ class ControlManager{
 }
 
 class CleanModifiedParameters{
-	static n_iter = new Parameter(
-		'n_iter', 
-		'Maximum number of iterations to perform. A good starting number is 100', 
-		'integer(1,inf)', 
-		Number, 
-		10
-	)
-	static adaptive_threshold_flag = new Parameter(
-		"adaptive_threshold_flag", 
-		"If true, will apply heuteristics to find the optimal threshold at each iteration and not rely upon a manually set threshold", 
-		"bool", 
-		Boolean, 
-		true
-	)
-	static threshold = new Parameter(
-		'threshold', 
-		"Fraction of the residual's brightest pixel, above which a pixel will be selected as a 'source pixel'. Must be in the range (0,1).", 
-		"real(0,1)", 
-		Number, 
-		0.3
-	)
-	static loop_gain = new Parameter(
-		"loop_gain", 
-		"What fraction of a selected pixel is treated as a 'source' each iteration. Must be in the range (0,1).", 
-		"real(0,1)", 
-		Number, 
-		0.1
-	)
-	static rms_frac_threshold = new Parameter(
-		"rms_frac_threshold", 
-		"When the root-mean-square of the residual is below this fraction of it's original value, iteration will stop. Must be in the range (0,1).", 
-		"real(0,1)", 
-		Number, 
-		1E-2
-	)
-	static fabs_frac_threshold = new Parameter(
-		"fabs_frac_threshold", 
-		"When the brightest pixel of the residual is below this fraction of it's original value, iteration will stop. Must be in the range (0,1).", 
-		"real(0,1)", 
-		Number, 
-		1E-2
-	) 
-	static clean_beam_sigma = new Parameter(
-		"clean_beam_sigma", 
-		"The standard deviation (in pixels) of the gaussian 'clean beam' to convolve source components with, forming the 'clean map'. If zero, no clean beam is used", 
-		"real", 
-		Number, 
-		0
-	)
-	static add_residual_flag = new Parameter(
-		"add_residual_flag", 
-		"If true, will add the residual to the clean map after convolution with the cleam beam (if requested)", 
-		"bool", 
-		Boolean, 
-		false
-	) 
+	static parameters = [
+		new Parameter(
+			'n_iter', 
+			'Maximum number of iterations to perform. A good starting number is 100', 
+			'integer(1,inf)', 
+			Number, 
+			10
+		),
+		new Parameter(
+			"adaptive_threshold_flag", 
+			"If true, will apply heuteristics to find the optimal threshold at each iteration and not rely upon a manually set threshold", 
+			"bool", 
+			Boolean, 
+			true
+		),
+		new Parameter(
+			'threshold', 
+			"Fraction of the residual's brightest pixel, above which a pixel will be selected as a 'source pixel'. Must be in the range (0,1).", 
+			"real(0,1)", 
+			Number, 
+			0.3
+		),
+		new Parameter(
+			"loop_gain", 
+			"What fraction of a selected pixel is treated as a 'source' each iteration. Must be in the range (0,1).", 
+			"real(0,1)", 
+			Number, 
+			0.1
+		),
+		new Parameter(
+			"rms_frac_threshold", 
+			"When the root-mean-square of the residual is below this fraction of it's original value, iteration will stop. Must be in the range (0,1).", 
+			"real(0,1)", 
+			Number, 
+			1E-2
+		),
+		new Parameter(
+			"fabs_frac_threshold", 
+			"When the brightest pixel of the residual is below this fraction of it's original value, iteration will stop. Must be in the range (0,1).", 
+			"real(0,1)", 
+			Number, 
+			1E-2
+		),
+		new Parameter(
+			"clean_beam_sigma", 
+			"The standard deviation (in pixels) of the gaussian 'clean beam' to convolve source components with, forming the 'clean map'. If zero, no clean beam is used", 
+			"real", 
+			Number, 
+			0
+		),
+		new Parameter(
+			"add_residual_flag", 
+			"If true, will add the residual to the clean map after convolution with the cleam beam (if requested)", 
+			"bool", 
+			Boolean, 
+			false
+		),
+	];
 	
 	constructor(parent_element){
 		this.ctl_container = ControlManager.create_container({class:"param-container"})
 		
+		this.parameter_ctls = new Map()
+		
 		// build controls for each parameter
-		this.n_iter_ctl = ControlManager.create_control_for(CleanModifiedParameters.n_iter)
-		this.adaptive_threshold_flag_ctl = ControlManager.create_control_for(CleanModifiedParameters.adaptive_threshold_flag)
-		this.threshold_ctl = ControlManager.create_control_for(CleanModifiedParameters.threshold)
-		this.loop_gain_ctl = ControlManager.create_control_for(CleanModifiedParameters.loop_gain)
-		this.rms_frac_threshold_ctl = ControlManager.create_control_for(CleanModifiedParameters.rms_frac_threshold)
-		this.fabs_frac_threshold_ctl = ControlManager.create_control_for(CleanModifiedParameters.fabs_frac_threshold)
-		this.clean_beam_sigma_ctl = ControlManager.create_control_for(CleanModifiedParameters.clean_beam_sigma)
-		this.add_residual_flag_ctl = ControlManager.create_control_for(CleanModifiedParameters.add_residual_flag)
-		
-		
+		for (const param of CleanModifiedParameters.parameters){
+			this.parameter_ctls.set(param.name,  ControlManager.create_control_for(param))
+		}
+	
+	
 		// Create groups of parameters that influence reported values
 		
 		// add parameter controls to correct place in html document
-		this.ctl_container.append(
-			this.n_iter_ctl.html_container,
-			this.adaptive_threshold_flag_ctl.html_container,
-			this.threshold_ctl.html_container,
-			this.loop_gain_ctl.html_container,
-			this.rms_frac_threshold_ctl.html_container,
-			this.fabs_frac_threshold_ctl.html_container,
-			this.clean_beam_sigma_ctl.html_container,
-			this.add_residual_flag_ctl.html_container
-		)
-		
+		for(const [key, value] of this.parameter_ctls){
+			this.ctl_container.append(value.html_container)
+		}
+
 		// Add event listeners here
 
-		this.adaptive_threshold_flag_ctl.addEventListener("change", (e)=>{
-				this.threshold_ctl.input_element.disabled = e.target.checked
+		this.parameter_ctls.get("adaptive_threshold_flag").addEventListener("change", (e)=>{
+				this.parameter_ctls.get("threshold").input_element.disabled = e.target.checked
 			}
 		)
 		
 		// want to run this on initialisation as well as when control is changed
-		this.adaptive_threshold_flag_ctl.dispatchEvent(new Event("change"))
+		this.parameter_ctls.get("adaptive_threshold_flag").dispatchEvent(new Event("change"))
+		//this.adaptive_threshold_flag_ctl.dispatchEvent(new Event("change"))
 		
 		parent_element.appendChild(this.ctl_container)
 	}
 	
+	validate(){
+		let invalid_params = []
+		for(const [key, param_ctl] of this.parameter_ctls){
+			if(!param_ctl.validate()){
+				invalid_params.push(key)
+			}
+		}
+		return invalid_params
+	}
+	
+	values(){
+		let param_ctl_values = new Map()
+		for(const [key, param_ctl] of this.parameter_ctls){
+			param_ctl_values.set(key, param_ctl.getValue())
+		}
+		return param_ctl_values
+	}
+	
+	valieOf(param_name){
+		this.parameter_ctls.get(param_name).getValue()
+	}
+	
+	
 	set_params(deconv_type, deconv_name){
 		console.log(deconv_type, deconv_name)
 		
-		assert(this.n_iter_ctl.validate())
-		assert(this.loop_gain_ctl.validate())
-		assert(this.adaptive_threshold_flag_ctl.validate())
-		assert(this.threshold_ctl.validate())
-		assert(this.clean_beam_sigma_ctl.validate())
-		assert(this.add_residual_flag_ctl.validate())
-		assert(this.rms_frac_threshold_ctl.validate())
-		assert(this.fabs_frac_threshold_ctl.validate())
+		let invalid_params = this.validate()
 		
+		if(invalid_params.length != 0){
+			return invalid_params
+		}
 		
-		console.log(
-			this.n_iter_ctl.getValue(),
-			0, //n_positive_iter
-			this.loop_gain_ctl.getValue(),
-			this.adaptive_threshold_flag_ctl.getValue(),
-			this.threshold_ctl.getValue(),
-			this.clean_beam_sigma_ctl.getValue(),
-			this.add_residual_flag_ctl.getValue(),
-			1E-2,
-			this.rms_frac_threshold_ctl.getValue(),
-			this.fabs_frac_threshold_ctl.getValue()
-		)
+		let param_ctl_values = this.values()
+		for(const [key, value] of param_ctl_values){
+			console.log(`Parameter '${key}' = ${value}`)
+		}
 		
 		Module.set_deconvolver_parameters(
 			deconv_type, 
 			deconv_name,
-			this.n_iter_ctl.getValue(),
+			param_ctl_values.get("n_iter"),
 			0, //n_positive_iter
-			this.loop_gain_ctl.getValue(),
-			this.adaptive_threshold_flag_ctl.getValue(),
-			this.threshold_ctl.getValue(),
-			this.clean_beam_sigma_ctl.getValue(),
-			this.add_residual_flag_ctl.getValue(),
+			param_ctl_values.get("loop_gain"),//this.loop_gain_ctl.getValue(),
+			param_ctl_values.get("adaptive_threshold_flag"),//this.adaptive_threshold_flag_ctl.getValue(),
+			param_ctl_values.get("threshold"),//this.threshold_ctl.getValue(),
+			param_ctl_values.get("clean_beam_sigma"),//this.clean_beam_sigma_ctl.getValue(),
+			param_ctl_values.get("add_residual_flag"),//this.add_residual_flag_ctl.getValue(),
 			1E-2,
-			this.rms_frac_threshold_ctl.getValue(),
-			this.fabs_frac_threshold_ctl.getValue()
+			param_ctl_values.get("rms_frac_threshold"),//this.rms_frac_threshold_ctl.getValue(),
+			param_ctl_values.get("fabs_frac_threshold"),//this.fabs_frac_threshold_ctl.getValue()
 		)
 	}
 }

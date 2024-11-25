@@ -67,6 +67,7 @@ class ImageHolder {
 		this.im_display_data = await getImageDataFromResult(Module.image_as_JSImageData, [this.name], this.im_w, this.im_h)
 		this.target_canvas.width = this.im_w
 		this.target_canvas.height = this.im_h
+		this.target_canvas.style = `aspect-ratio: ${this.im_w} / ${this.im_h};`
 		this.target_canvas_ctx.imageSmoothingEnabled = false
 		this.target_canvas_ctx.putImageData(this.im_display_data, 0, 0)
 
