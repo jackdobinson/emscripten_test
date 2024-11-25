@@ -8,6 +8,83 @@
 // * Would be nice to be able to set styles etc. of lines, text, markers etc.
 
 
+/*
+Anatomy of a plot:
+
+Figures hold plot areas
+plot areas hold axes and data areas
+data areas hold data points
+
+##############################################
+# figure                                     #
+#                                            #
+#    ---------------------------             #
+#    | plot_area               |             #
+#    |                         |             #
+#    |    |axes                |             #
+#    |    V                    |             #
+#    |   ##   ...........      |             #
+#    |   ##   . data    .      |             #
+#    |   ##   . Area    .      |             #
+#    |   ##   .         .      |             #
+#    |   ##   ...........      |             #
+#    |   ##                    |             #
+#    |   ################      |             #
+#    |   ################      |             #
+#    |                         |             #
+#    ---------------------------             #
+#                                            #
+#                                            #
+##############################################
+
+dataArea represents the area of a plot that we want to
+draw a dataset inside. Can be any geometrical shape but usually a rectangle
+
+A dataset is a collection of data. I.e. the (x,y) coords of point data, 
+the (category, count) values of categorical data. All data in a dataset
+MUST share the same interpretation. I.e. cannot mix (x,y) data with 
+(category, count) data within a dataset.
+
+When a dataset is drawn to a dataArea, it's values are transformed from
+its "dataset coordinates" to "representation coordinates" to "dataArea coordinates" 
+
+"dataArea coordinates" always run from 0 to 1, with (0,0) at the bottom left and (1,1) at the top right.
+
+"representation coordinates" are an intermediate coordinate system that defines how the axes are drawn.
+This allows us to e.g. plot the logarithm of a dataset instead of the dataset itself just by changing 
+the "representation coordinate transform". Data that is transformed to the same "representation coordinates"
+can SHARE and axis.
+
+The "dataset coordinates" are the raw values of the data in the dataset. In simple cases the transformation
+from "dataset coordinates" to "representation coordinates" is the identity transform. However, if we
+e.g. have two datasets (A and B) where A is a collection of (time, instrument_A_reading), and B is a collection
+of (time, instrument_B_reading), and we know that instrument_A_reading is in units X, but instrument_B_reading is
+in units log(X). We can plot them on the same axis by letting the dataset2representation_transform for each dataset be
+datasetA2representation_transform = identity, datasetB2representation_transform=(b[0],exp(b[1])).
+
+Therefore, each dataset requires its own dataset2representation_transform.
+
+These coord systems are defined in terms of transforms:
+* dataset2representation_transform
+* representation2dataArea_transfrom
+* dataArea2plotArea_transform
+* plotArea2figure_transform
+
+An axis is a visualisation of a "representation coordinate" system. It is placed in plot coordinates,
+usually not covering the dataArea. One axis represents the change of one component of a "representation coordinate" system
+with the other components held constant. This is usually visuallised as a solid line (the constant part in a 2d coord system),
+with tick-marks and tick-labels along its length (marking the varying part in a 2d coord system).
+
+An axis can be placed anywhere, but is best placed at the edges of the dataArea its "representation coordinate" system corresponds to.
+
+A "representation coordinate" system can have multiple visualisations if needed, for example gridding over the dataArea is
+another visualisation of a "representation coordinate" system.
+
+
+
+*/
+
+
 function createSvgElement(tag, attributes={}){
 	let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
 	for (const key of Object.keys(attributes)){
