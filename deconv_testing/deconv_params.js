@@ -480,5 +480,7 @@ class CleanModifiedParameters{
 			param_ctl_values.get("rms_frac_threshold"),//this.rms_frac_threshold_ctl.getValue(),
 			param_ctl_values.get("fabs_frac_threshold"),//this.fabs_frac_threshold_ctl.getValue()
 		)
+		
+		return invalid_params // need to return a list
 	}
 }
