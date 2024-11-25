@@ -37,6 +37,13 @@ data areas hold data points
 #                                            #
 ##############################################
 
+"display coordinates" are in terms of whatever we are drawing on, e.g. a screen or a canvas. This is
+the coordinate system that we ultimately convert to.
+
+"figure coordinates" always run from 0 to 1, with (0,0) at the bottom left and (1,1) at the top right.
+
+"plot_area coordinates" always run from 0 to 1, with (0,0) at the bottom left and (1,1) at the top right.
+
 dataArea represents the area of a plot that we want to
 draw a dataset inside. Can be any geometrical shape but usually a rectangle
 
@@ -69,6 +76,7 @@ These coord systems are defined in terms of transforms:
 * representation2dataArea_transfrom
 * dataArea2plotArea_transform
 * plotArea2figure_transform
+* figure2display_transform
 
 An axis is a visualisation of a "representation coordinate" system. It is placed in plot coordinates,
 usually not covering the dataArea. One axis represents the change of one component of a "representation coordinate" system
@@ -80,7 +88,13 @@ An axis can be placed anywhere, but is best placed at the edges of the dataArea 
 A "representation coordinate" system can have multiple visualisations if needed, for example gridding over the dataArea is
 another visualisation of a "representation coordinate" system.
 
+Annotations on a plot are things like drawing a box around a region, vertical lines to indicate something important, text to
+highlight specific datapoints or label datasets etc. Depending on the annotation they will usually be defined in either the
+"dataset", "representation", "dataArea", or sometimes "plotArea" coordinate systems.
 
+NOTE: with text annotations, it is often important to define their position in "dataset" coords, but to draw the characters in
+"plotArea", "figure" or even "display" coords. This is because generally we do not want to apply transforms to the shapes of the
+character glyphs, we only want to apply transforms to where the text is placed.
 
 */
 
@@ -110,6 +124,190 @@ function formatNumber(a, sig_figs=3, round_to=1E-12){
 	return a.toPrecision(sig_figs)
 }
 
+
+class Transformer{
+	constructor({
+			transform_data = T.identity, 
+			transform_function = (...args)=>T.apply(this.transform_data, args)
+		}){
+		assert_all_defined(transform_data, transform_function)
+		
+		this.transform_data = transform_data
+		this.transform_function = transform_function
+	}
+	
+	apply(...args){
+		return this.transform_function(...args)
+	}
+	
+	*apply_block(...args){
+		for(const item of args){
+			yield this.apply(...item)
+		}
+	}
+}
+
+
+class DataSet{
+	static from(iterable, ...args){
+		let dataset = new DataSet(...args)
+		dataset.fill_from(iterable)
+		return dataset
+	}
+
+	constructor({
+			field_info = {}, 
+			dataset2representation_transform = new Transformer(),
+			n_max_entries = 1024,
+			storage_type = Float32Array,
+		}){
+		this.n_fields = field_info.length
+		this.field_info = field_info
+		
+		// from coords the data is in, to arbitrary "representation" coords. In the simplistic case this is the identity transform
+		this.dataset2representation_transform = dataset2representation_transform
+		
+		this.n_max_entries = n_max_entries
+		this.is_typed_array = false
+		this.size = 0
+		
+		if (storage_type.prototype instanceof Object.getPrototypeOf(Uint8Array)){
+			this.is_typed_array = true
+			this.storage = new storage_type(this.field_info.length*this.n_max_entries)
+		} 
+		else if (storage_type == Array){
+			this.storage = []
+		}else {
+			this.storage = new storage_type(this.n_max_entries)
+		}
+		
+	}
+	
+	transform(...args){
+		this.dataset2representation_transform.apply(...args)
+	}
+	
+	check_size(index=0){
+		if (this.size <= index){
+			throw new Error(`Cannot set index ${index} at or beyond size ${this.size}`)
+		}
+		if (this.n_max_entries < this.size){
+			throw new Error(`Size ${this.size} is larger than max entries ${this.n_max_entries}`)
+		}
+	}
+	
+	field(n){
+		assert(n < this.n_fields, "Must have n or more fields to request n^th one.")
+		
+		return Object.entries(this.field_info)[n]
+	}
+	
+	*fields(){
+		yield* Object.entries(this.field_info)
+	}
+	
+	at(index){
+		this.check_size(index)
+		if (this.is_typed_array){
+			return this.storage.subarray(index*this.n_fields, (index+1)*this.n_fields)
+		}
+		return this.storage[index]
+	}
+	
+	
+	
+	_set_typed_array(index, value){
+		if ((this.n_fields == 1) && (value.length == undefined)){
+			this.storage[index] = value
+			return
+		}
+		
+		let x = this.storage.subarray(index*this.n_fields, (index+1)*this.n_fields)
+		for(const [i,item] of value.entries()){
+			x[i] = item
+		}
+	}
+	
+	set(index, value){
+		this.check_size(index)
+		if (this.is_typed_array){
+			this._set_typed_array(index, value)
+		}
+		else {
+			this.storage[index] = value
+		}
+		return this
+	}
+	
+	push(value){
+		this.size++
+		this.check_size()
+		if(this.is_typed_array){
+			this._set_typed_array(this.size-1,value)
+		} else {
+			this.storage.push(value)
+		}
+		return this
+	}
+	
+	fill_from(iterable){
+		for(const item of iterable){
+			this.push(item)
+		}
+	}
+}
+
+class Representation{
+	constructor({
+		representation2dataArea_transform = new Transformer()
+	}){
+		// Transform from arbitrary "representation coords" to dataArea coords which run from (0,1) in each dimension
+		this.representation2dataArea_transform = representation2dataArea_transform
+	}
+	
+	transform(...args){
+		this.representation2dataArea_transform.apply(...args)
+	}
+}
+
+class DataArea{
+	constructor({
+		dataArea2plotArea_transform = new Transformer()
+	}){
+		this.dataArea2plotArea_transform = dataArea2plotArea_transform
+	}
+	
+	transform(...args){
+		this.dataArea2plotArea_transform.apply(...args)
+	}
+}
+
+class PlotArea{
+	constructor({
+		plotArea2figure_transform = new Transformer()
+	}){
+		this.plotArea2figure_transform = plotArea2figure_transform
+	}
+	
+	transform(...args){
+		this.plotArea2figure_transform.apply(...args)
+	}
+}
+
+class Figure{
+	constructor({
+		figure2display_transform = new Transformer()
+	}){
+		this.figure2display_transform = figure2display_transform
+	}
+	
+	transform(...args){
+		this.figure2display_transform.apply(...args)
+	}
+}
+
+
+/*
 class DataArea{
 	
 	constructor(
@@ -175,19 +373,19 @@ class DataArea{
 		this.svg_scaling_factor =  2E-3*(V.accumulate_sum(V.component_abs(this.d_rect_in_p.s)))
 		console.log("svg_scaling_factor", this.svg_scaling_factor)
 		
-		/*
+		
 		// debugging box
-		let bbox_width = 2E-2
-		let bbox_color = "blue"
-		this.svg_box = this.d_rect_in_f.asSvg({
-			"class":"data-area-bbox",
-			"stroke":bbox_color,
-			"stroke-width":bbox_width,
-			"fill":"none",
-			"stroke-opacity":0.3,
-		})
-		this.svg_group.appendChild(this.svg_box)
-		*/
+		//let bbox_width = 2E-2
+		//let bbox_color = "blue"
+		//this.svg_box = this.d_rect_in_f.asSvg({
+		//	"class":"data-area-bbox",
+		//	"stroke":bbox_color,
+		//	"stroke-width":bbox_width,
+		//	"fill":"none",
+		//	"stroke-opacity":0.3,
+		//})
+		//this.svg_group.appendChild(this.svg_box)
+		
 		
 		
 		this.axes = this.createAxes(this.ax_labels)
@@ -694,19 +892,19 @@ class PlotArea{
 		
 		this.svg_group = createSvgElement("g", {id:`plot-area ${this.label}`})
 		
-		/*
+		
 		// debugging box
-		let bbox_width = 2E-2
-		let bbox_color = "green"
-		this.svg_box = this.p_rect_in_f.asSvg({
-			"class":"plot-area-bbox",
-			"stroke":bbox_color,
-			"stroke-width":bbox_width,
-			"fill":"none",
-			"stroke-opacity":0.3,
-		})
-		this.svg_group.appendChild(this.svg_box)
-		*/
+		//let bbox_width = 2E-2
+		//let bbox_color = "green"
+		//this.svg_box = this.p_rect_in_f.asSvg({
+		//	"class":"plot-area-bbox",
+		//	"stroke":bbox_color,
+		//	"stroke-width":bbox_width,
+		//	"fill":"none",
+		//	"stroke-opacity":0.3,
+		//})
+		//this.svg_group.appendChild(this.svg_box)
+		
 		
 		this.data_area_map = new Map()
 		this.current_data_area = null
@@ -765,19 +963,19 @@ class SvgFig{
 			height:`${s_scale[1]}${scale_units}`, // height of svg element
 		})
 		
-		/*
+		
 		// debugging box
-		let bbox_width = 2E-2
-		let bbox_color = "red"
-		this.svg_box = this.f_rect_in_f.asSvg({
-			"class":"figure-bbox",
-			"stroke":bbox_color,
-			"stroke-width":bbox_width,
-			"fill":"none",
-			"stroke-opacity":0.3,
-		})
-		this.svg.appendChild(this.svg_box)
-		*/
+		//let bbox_width = 2E-2
+		//let bbox_color = "red"
+		//this.svg_box = this.f_rect_in_f.asSvg({
+		//	"class":"figure-bbox",
+		//	"stroke":bbox_color,
+		//	"stroke-width":bbox_width,
+		//	"fill":"none",
+		//	"stroke-opacity":0.3,
+		//})
+		//this.svg.appendChild(this.svg_box)
+		
 		
 		this.updateViewbox()
 		
@@ -839,3 +1037,6 @@ class LogLinePlot extends LinePlot{
 		this.current_data_area.add_data_point(args[0], Math.log10(args[1]))
 	}
 }
+
+
+*/
