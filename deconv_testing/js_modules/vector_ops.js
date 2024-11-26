@@ -36,6 +36,14 @@ class V{
 		return type.from(m.elements)
 	}
 
+	static select_by_idxs(a, ...idxs){
+		let v1 = V.of_size(idxs.length)
+		for(let i=0;i<idxs.length;i++){
+			v1[i] = a[idxs[i]]
+		}
+		return v1
+	}
+
 	static typed_from(type, ...args){
 		// type : Float64Array | Float32Array | Int32Array | Int16Array | Uint32Array | Uint16Array | Uint8Array | ...
 		return type.from(args)

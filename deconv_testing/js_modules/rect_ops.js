@@ -5,11 +5,20 @@
 // * transform_ops.js
 
 class R{
+	
+	static fromPoints(p){
+		return new R(p[0][0],p[0][1],p[1][0]-p[0][0],p[1][1]-p[0][1])
+	}
+
 	constructor(x,y,w,h){
 		this.r = V.from(x,y)
 		this.s = V.from(w,h)
 		
 		Object.seal(this)
+	}
+	
+	asPoints(){
+		return [V.from(this.r[0], this.r[1]), V.from(this.r[0]+this.s[0], this.r[1]+this.s[1])]
 	}
 	
 	applyTransform(t){
@@ -23,6 +32,10 @@ class R{
 		this.r = T.apply(t, this.r)
 		this.s = T.scale(t, this.s)
 		return this
+	}
+	
+	asString(units=""){
+		return `${this.r[0]}${units} ${this.r[1]}${units} ${this.s[0]}${units} ${this.s[1]}${units}`
 	}
 	
 	asSvg(attrs){
@@ -43,6 +56,11 @@ class R{
 	static getTransformFromUnitCoordsTo(a){
 		// get a transform from unit coords (0,0,1,1) to rect coords
 		return T.from(a.s[0], a.s[1], a.r[0],a.r[1])
+	}
+	
+	static getTransformToUnitCoordsFrom(a){
+		// get a transform to unit coords (0,0,1,1) from rect coords
+		return T.invert(R.getTransformFromUnitCoordsTo(a))
 	}
 
 	static getTransformFromTo(a, b){

@@ -98,6 +98,8 @@ character glyphs, we only want to apply transforms to where the text is placed.
 
 */
 
+// QUESTION: How to hold style information for a graph?
+
 
 function createSvgElement(tag, attributes={}){
 	let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
@@ -126,24 +128,117 @@ function formatNumber(a, sig_figs=3, round_to=1E-12){
 
 
 class Transformer{
+	// Want this to be able to apply matrix and general functional transforms
+	// therefore need to chain the transforms together
+	//
+	// NOTE: If there are no transforms in the chain, should just return input unchanged (identity transform)
+	//
+	// IDEA: This should possibly be a tree, with each node on the tree being the transform for a specific
+	// coord system towards the screen coord system
+	
+	static combine(t_a2b2c, t_c2d2e){
+		// transformer 1 is applied, then transformer 2 in forward direction, reversed for backwards direction
+		return new Transformer({
+			fwd_transform_chain : ((t_a2b2c===null)? [] : t_a2b2c.fwd_transform_chain).concat((t_c2d2e===null)? [] :t_c2d2e.fwd_transform_chain),
+			bck_transform_chain : ((t_c2d2e===null)? [] : t_c2d2e.bck_transform_chain).concat((t_a2b2c===null)? [] : t_a2b2c.bck_transform_chain)
+		})
+	}
+	
+	static single(fwd_t, bck_t){
+		return new Transformer({
+			fwd_transform_chain :[fwd_t],
+			bck_transform_chain :[bck_t]
+		})
+	}
+	
+	static fromT(t){
+		return Transformer.single(
+			(...args)=>T.apply(t,args),
+			(...args)=>T.iapply(t,args)
+		)
+	}
+	
 	constructor({
-			transform_data = T.identity, 
-			transform_function = (...args)=>T.apply(this.transform_data, args)
-		}){
-		assert_all_defined(transform_data, transform_function)
+			fwd_transform_chain = [],
+			bck_transform_chain = [],
+		} = {}){
+		assert_all_defined(fwd_transform_chain, fwd_transform_chain)
+		this.fwd_transform_chain = fwd_transform_chain
+		this.bck_transform_chain = bck_transform_chain
 		
-		this.transform_data = transform_data
-		this.transform_function = transform_function
+		console.log(this.fwd_transform_chain)
+		console.log(this.bck_transform_chain)
+		
 	}
 	
-	apply(...args){
-		return this.transform_function(...args)
-	}
-	
-	*apply_block(...args){
-		for(const item of args){
-			yield this.apply(...item)
+	forward(...args){
+		let i=0
+		console.log(`transform input: ${args}`)
+		for(const t of this.fwd_transform_chain){
+			args = t(...args)
+			console.log(`transform ${i} result: ${args}`)
+			i++
 		}
+		return args
+	}
+	
+	forward_scale(...args){
+		console.log(`forward_scale input ${args}`)
+		let a = V.zeros(args.length)
+		let b = V.from(...args)
+		let [at, bt] = this.block_forward(a, b)
+		console.log(`forward_scale result ${V.sub(bt, at)}`)
+		return V.sub(bt,at)
+	}
+	
+	backward(...args){
+		for(const t of this.bck_transform_chain){
+			args = t(...args)
+		}
+		return args
+	}
+	
+	backward_scale(...args){
+		let a = V.zeros(args.length)
+		let b = V.from(...args)
+		let [at, bt] = this.block_backward(a, b)
+		return V.sub(bt,at)
+	}
+	
+	block_forward(...args){
+		console.log(`block transform input ${args}`)
+		let result = []
+		for(const item of args){
+			result.push(this.forward(...item))
+		}
+		console.log(`block transform result ${result}`)
+		return result
+	}
+	
+	block_backward(...args){
+		let result=[]
+		for(const item of args){
+			result.push(this.backward(...item))
+		}
+		return result
+	}
+	
+	block_forward_scale(...args){
+		console.log(`block transform scale input ${args}`)
+		let result = []
+		for(const item of args){
+			result.push(this.forward_scale(...item))
+		}
+		console.log(`block transform scale result ${result}`)
+		return result
+	}
+	
+	block_backward_scale(...args){
+		let result=[]
+		for(const item of args){
+			result.push(this.backward_scale(...item))
+		}
+		return result
 	}
 }
 
@@ -156,24 +251,24 @@ class DataSet{
 	}
 
 	constructor({
-			field_info = {}, 
-			dataset2representation_transform = new Transformer(),
+			field_info = {}, // {"field_name_1":{...info...}, "field_name_2":{...info...}, ...}
+			ds2r_transform = new Transformer(),
 			n_max_entries = 1024,
 			storage_type = Float32Array,
-		}){
+		}={}){
 		this.n_fields = field_info.length
 		this.field_info = field_info
 		
 		// from coords the data is in, to arbitrary "representation" coords. In the simplistic case this is the identity transform
-		this.dataset2representation_transform = dataset2representation_transform
+		this.ds2r_transform = ds2r_transform
 		
 		this.n_max_entries = n_max_entries
 		this.is_typed_array = false
-		this.size = 0
+		this.size = 0 // number of valid entries. NOTE: Each entry consists of 'this.n_fields' fields. So the total number of bits of data is this.n_fields*this.size
 		
 		if (storage_type.prototype instanceof Object.getPrototypeOf(Uint8Array)){
 			this.is_typed_array = true
-			this.storage = new storage_type(this.field_info.length*this.n_max_entries)
+			this.storage = new storage_type(this.n_fields*this.n_max_entries)
 		} 
 		else if (storage_type == Array){
 			this.storage = []
@@ -181,10 +276,6 @@ class DataSet{
 			this.storage = new storage_type(this.n_max_entries)
 		}
 		
-	}
-	
-	transform(...args){
-		this.dataset2representation_transform.apply(...args)
 	}
 	
 	check_size(index=0){
@@ -196,10 +287,43 @@ class DataSet{
 		}
 	}
 	
+	*entries(){
+		if(this.is_typed_array){
+			for(let i=0; i<this.size; ++i){
+				yield [i, this.storage.subarray(index*this.n_fields, (index+1)*this.n_fields)]
+			}
+		} else {
+			yield* this.storage.entries()
+		}
+	}
+	
 	field(n){
 		assert(n < this.n_fields, "Must have n or more fields to request n^th one.")
 		
 		return Object.entries(this.field_info)[n]
+	}
+	
+	indexOfField(field_name){
+		idx = Object.keys(this.field_info).indexOf(field_name)
+		assert(idx != -1, "Field name must be present to get its index")
+		return idx
+	}
+	
+	*getDataByField(field_name){
+		field_index = this.indexOfField(field_name)
+		yield* this.getDataByIndex(field_index)
+	}
+	
+	*getDataByIndex(idx){
+		if (this.is_typed_array){
+			for(let i=0;i<this.size; ++i){
+				yield this.storage[i*this.n_fields + idx]
+			}
+		} else {
+			for(const datum of this.storage){
+				yield datum[idx]
+			}
+		}
 	}
 	
 	*fields(){
@@ -257,53 +381,326 @@ class DataSet{
 	}
 }
 
+
+RepresentationDimensionDefaultStyles = {
+	"colour" : [
+		"red",
+		"green",
+		"blue",
+		"purple",
+		"brown",
+		"yellow",
+	],
+	"marker" : [
+		"circle",
+		"square",
+		"triangle",
+		"cross",
+		"dot",
+		"plus",
+	],
+	"line" : [
+		"solid",
+		"dashed",
+		"dotted",
+	],
+}
+
 class Representation{
+	// This class is responsible for transforming dataset values to the data area coords
+	static fromExtent(extent){
+		return new Representation({
+			r2da_transform : Transformer.fromT(T.invert(E.getTransformFromUnitCoordsTo(extent))),
+		})
+	}
+
 	constructor({
-		representation2dataArea_transform = new Transformer()
-	}){
+		r2da_transform = new Transformer(),
+		dimension_names = [
+			"x",
+			"y",
+			"size",
+			"colour",
+			"marker",
+			"line",
+		],
+	}={}){
 		// Transform from arbitrary "representation coords" to dataArea coords which run from (0,1) in each dimension
-		this.representation2dataArea_transform = representation2dataArea_transform
+		this.r2da_transform = r2da_transform
+		this.dimension_names = dimension_names
+		
+		
+		this.datasets = new Map()
+		//this.dataset_field_to_dimension_associations = new Map()
+		this.dimension_to_dataset_field_associations = new Map()
+		this.dataset_field_pos_indices = new Map()
+		
+		
+		
 	}
 	
-	transform(...args){
-		this.representation2dataArea_transform.apply(...args)
+	associateDatasetFieldWithDimension(dataset_name, field_name, dimension_name){
+		let current_associations = this.dataset_field_to_dimension_associations.get(dataset_name)
+		let new_associations = {field_name : field_name, field_idx : this.datasets.get(dataset_name).indexOfField(field_name)}
+		if(current_associations === undefined){
+			current_associations = {dimension_name : new_associations}
+		} else {
+			current_associations[dimension_name] = new_associations
+		}
+		this.dataset_field_to_dimension_associations.set(dataset_name, current_associations)
+	}
+	
+	getFieldIndexOfDimension(dataset_name, dimension_name){
+		let d2f_assoc = this.dimension_to_dataset_field_associations.get(dataset_name)
+		if(d2f_assoc === undefined){
+			return this.dimension_names.indexOf(dimension_name)
+		}
+		
+		let f_assoc = d2f_assoc[dimension_name]
+		assert(f_assoc === undefined, "If we have an association between dimensions and field names, must be able to find passed dimension name")
+		
+		return f_assoc.field_idx
+	}
+
+	
+	getDatasetIdx(name){
+		return this.datasets.keys().indexOf(name)
+	}
+	
+	addDataset(name, dataset){
+		this.datasets.set(name, dataset)
+		let first_two_fields = [dataset.field(0).name, dataset.field(1).name]
+		for(const [i, field_name] of first_two_fields.entries()){
+			this.associateDatasetFieldWithDimension(name, field_name, dimension_names[i])
+		}
+	}
+	
+	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
+		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
+	}
+	
+	setDatasetPosFieldIndices(dataset_name){
+		this.dataset_field_pos_indices.set(dataset_name, [this.getFieldIndexOfDimension(dataset_name, "x"), this.getFieldIndexOfDimension(dataset_name,"y")])
+	}
+	
+	getPosFromData(dataset_name, data){
+		let pos_idxs = this.dataset_field_pos_indices.get(dataset_name)
+		return V.select_by_idxs(data, pos_idxs)
+	}
+	
+	render(renderer, transform){
+		let r2s_transform = Transformer.combine(this.r2da_transform, transform)
+		
+		// datasets
+		for (const [name, dataset] of this.datasets.entries()){
+			if(!renderer.hasGroup(name)){
+				renderer.addGroup(name)
+			}
+			for(const data of dataset.entries()){
+				renderer.draw
+			}
+		}
 	}
 }
 
+
+
+
 class DataArea{
 	constructor({
-		dataArea2plotArea_transform = new Transformer()
-	}){
-		this.dataArea2plotArea_transform = dataArea2plotArea_transform
+		da_rect_in_p = new R(0.1,0.1,0.8,0.8)
+	}={}){
+		this.da_rect_in_p = da_rect_in_p
+		this.da2p_transform = null
+		this.updateTransform()
+		
+		this.representations = new Map()
+		
 	}
 	
-	transform(...args){
-		this.dataArea2plotArea_transform.apply(...args)
+	addRepresentation(name, representation){
+		this.representations.set(name, representation)
 	}
+	
+	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
+		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
+	}
+	
+	render(renderer, transform){
+		let da2s_transform = Transformer.combine(this.da2p_transform, transform)
+	
+		// Debug box
+		this.draw(renderer, transform, "rect", [this.da_rect_in_p.r], [this.da_rect_in_p.s], [], {
+			"stroke":"yellow",
+			"stroke-width":"0.1",
+		})
+		
+		// representations
+		for(const [name, representation] of this.representations.entries()){
+			representation.render(
+				renderer, 
+				da2s_transform
+			)
+		}
+		
+	}
+	updateTransform(){
+		this.da2p_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.da_rect_in_p))
+	}
+
 }
 
 class PlotArea{
 	constructor({
-		plotArea2figure_transform = new Transformer()
-	}){
-		this.plotArea2figure_transform = plotArea2figure_transform
+		p_rect_in_f = new R(0,0,1,1),
+	}={}){
+		this.p_rect_in_f = p_rect_in_f
+		this.p2f_transform = null
+		this.updateTransform()
+		
+		this.data_areas = new Map()
+		
 	}
 	
-	transform(...args){
-		this.plotArea2figure_transform.apply(...args)
+	addDataArea(name, plot_area){
+		this.data_areas.set(name, plot_area)
 	}
+	
+	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
+		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
+	}
+	
+	render(renderer, transform){
+		let p2s_transform = Transformer.combine(this.p2f_transform, transform)
+	
+		// Debug box
+		this.draw(renderer, transform, "rect", [this.p_rect_in_f.r], [this.p_rect_in_f.s], [], {
+			"stroke":"blue",
+			"stroke-width":"0.1",
+		})
+		
+		// data_area
+		for(const [name, data_area] of this.data_areas.entries()){
+			data_area.render(
+				renderer, 
+				p2s_transform
+			)
+		}
+	}
+	
+	updateTransform(){
+		this.p2f_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.p_rect_in_f))
+	}
+
 }
 
 class Figure{
 	constructor({
-		figure2display_transform = new Transformer()
-	}){
-		this.figure2display_transform = figure2display_transform
+		f_rect_in_d = new R(0.1,0.1,0.8,-0.8), // rectangle that defines the figure position in display coords
+	}={}){
+		this.f_rect_in_d = f_rect_in_d
+		
+		this.f2d_transform = null // set in a method
+		this.updateTransform()
+		
+		
+		this.plot_areas = new Map()
+		
 	}
 	
-	transform(...args){
-		this.figure2display_transform.apply(...args)
+	addPlotArea(name, plot_area){
+		this.plot_areas.set(name, plot_area)
 	}
+	
+	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
+		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
+	}
+	
+	render(renderer, transform=new Transformer()){
+		let f2s_transform = Transformer.combine(this.f2d_transform, transform)
+
+		console.log(this.f_rect_in_d)
+		// Debug box
+		this.draw(renderer, transform, "rect", [this.f_rect_in_d.r], [this.f_rect_in_d.s], [], {
+			"stroke":"green",
+			"stroke-width":"0.1",
+		})
+		
+		
+		// plot_area
+		for(const [name, plot_area] of this.plot_areas.entries()){
+			plot_area.render(
+				renderer, 
+				f2s_transform
+			)
+		}
+	}
+
+	updateTransform(){
+		this.f2d_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.f_rect_in_d))
+	}
+
+}
+
+// Maybe split into Display class and SvgRenderer class?
+class SvgDisplay{
+	constructor({
+		renderTarget = null,
+		s_scale = V.from(6,4), // display scale
+		s_scale_units = "cm", //units of display scale
+	}={}){
+		this.s_scale = s_scale
+		this.s_scale_units = s_scale_units
+		this.d_rect_in_s = new R(0,0,this.s_scale[0],this.s_scale[1])
+		//this.d_rect_in_d = new R(0,0,1,1)
+		
+		this.renderer = new Svg({
+			scale : s_scale,
+			scale_units : s_scale_units,
+		})
+		
+		this.d2s_transform=null
+		this.updateTransform()
+		
+		this.setRendererTarget(renderTarget)
+		
+		this.figures = new Map()
+		
+	}
+	
+	updateTransform(){
+		//this.d2s_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.d_rect_in_s))
+		this.d2s_transform = new Transformer()
+	}
+	
+	addFigure(name, figure){
+		this.figures.set(name, figure)
+	}
+	
+	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
+		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
+	}
+	
+	render(){
+		// Debug box
+		this.renderer.add( "rect", [this.d_rect_in_s.r], [this.d_rect_in_s.s], [], {
+			"stroke":"red",
+			"stroke-width":"0.1",
+		})
+		
+		// figures
+		for(const [name, figure] of this.figures.entries()){
+			let topright_of_figure = V.add(figure.f_rect_in_d.r, figure.f_rect_in_d.s)
+			this.renderer.add("text", [V.from(topright_of_figure[0]/2, topright_of_figure[1])], [], [name], {})
+			figure.render(this.renderer, this.d2s_transform)
+		}
+	}
+	
+	setRendererTarget(renderTarget){
+		assert_all_defined(renderTarget)
+		this.renderer.setTarget(renderTarget)
+	}
+	
 }
 
 

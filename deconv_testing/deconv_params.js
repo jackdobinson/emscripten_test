@@ -167,7 +167,7 @@ class Control{
 		this.label_element = label_element
 		this.value_getter = value_getter
 		this.deserialiser = deserialiser
-		console.log("xxx", validator)
+		//console.log("xxx", validator)
 		this.validator = validator
 	}
 	
@@ -297,7 +297,7 @@ class ControlManager{
 				assert(false, `Unknown param type '${param.type_name}' to make control for`)
 		}
 		
-		console.log(ctl)
+		//console.log(ctl)
 		
 		assert_not_null(ctl)
 		

@@ -34,20 +34,32 @@ let deconv_residual = null
 
 let clean_modified_params = new CleanModifiedParameters(document.getElementById("parameter-container"))
 
+/*
 let svg_figure = new SvgFig(
 	"progress plots", 
 	document.getElementById("progress-plots"),
 	V.from(20,20),
 	new R(0,0,2,2)
 )
+*/
+
 let plot_name_map = new Map();
 
-/*
-const std::string& deconv_type, 
-		const std::string& deconv_name, 
-		const std::string& file_id,
-		const std::string& original_file_name
-*/
+let figure_display = new SvgDisplay({
+	renderTarget: document.getElementById("progress-plots"),
+	d_scale:V.from(6,4), 
+	d_scale_units:"cm"
+})
+
+figure_display.addFigure("fabs_record", new Figure({f_rect_in_d : new R(1,3,4,-2)}))
+
+figure_display.figures.get("fabs_record").addPlotArea("pa_1", new PlotArea({p_rect_in_f : new R(0.1,0.1,0.8,0.8)}))
+
+figure_display.figures.get("fabs_record").plot_areas.get("pa_1").addDataArea("da_1", new DataArea())
+
+figure_display.render()
+figure_display.renderer.renderToTarget()
+
 download_clean_map_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 
@@ -91,7 +103,7 @@ download_residual_button.addEventListener(
 )
 
 
-
+/*
 plot_name_map.set(
 	"fabs_record", 
 	new LogLinePlot({
@@ -123,7 +135,7 @@ plot_name_map.set(
 		p_rect_in_f: new R(0,1,1,1),
 	})
 )
-
+*/
 
 run_deconv_button.addEventListener("click", async (e)=>{
 		if ((sci_image_holder.name === null) || (psf_image_holder.name === null)) {
@@ -152,6 +164,7 @@ run_deconv_button.addEventListener("click", async (e)=>{
 			return;
 		}
 		
+		/*
 		// Automatically size the plot for the expected number of iterations
 		plot_name_map.get("fabs_record").current_data_area.setExtent(
 			E.from(
@@ -169,6 +182,7 @@ run_deconv_button.addEventListener("click", async (e)=>{
 				0
 			)
 		)
+		*/
 		
 		console.log("run_deconv_button.addEventListener::click", Math.log10(clean_modified_params.valueOf("fabs_frac_threshold")))
 
