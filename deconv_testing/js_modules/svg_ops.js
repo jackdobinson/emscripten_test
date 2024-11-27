@@ -26,9 +26,39 @@ class Svg{
 		return a.toPrecision(sig_figs)
 	}
 	
-	static rect(r, s, attrs={}){
+	static svg(
+		shape = V.from(4,6), //
+		units = "cm", //
+		scale = 1,
+		attrs = {}
+	){
+	
+		O.insertIfNotPresent(
+			attrs, 
+			{
+				width:`${shape[0]}${units}`, // width of svg element
+				height:`${shape[1]}${units}`, // height of svg element
+				viewBox : `0 0 ${scale*shape[0]} ${scale*shape[1]}`, // viewbox of svg element
+			}
+		)
+		return createSvgElement('svg', attrs)
+	}
+	
+	static n_group_instances
+	static group(id = `group-${Svg.n_group_instances}`, transform = null, attrs={}){
+		attrs.id = id
+		if (transform !== null){
+			attrs.transform = transform.toString()
+		}
+		return createSvgElement('g', attrs)
+	}
+	
+	static rect(extent, attrs={}){
 		// return an svg rect
 		// if height or width is -ve need to alter x and y coords
+		let r = extent.subarray(0,2)
+		let s = V.sub(extent.subarray(2,4), r)
+		
 		attrs.x = r[0] + (s[0] < 0 ? s[0] : 0)
 		attrs.y = r[1] + (s[1] < 0 ? s[1] : 0)
 		attrs.width = (s[0] < 0 ? - s[0] : s[0])
@@ -76,6 +106,26 @@ class Svg{
 		
 		return Svg.createElement("path", attrs)
 	}
+	
+	static line(path, attrs={}){
+		console.log("path", path)
+		attrs.x1 = path[0]
+		attrs.y1 = path[1]
+		attrs.x2 = path[2]
+		attrs.y2 = path[3]
+		
+		O.insertIfNotPresent(
+			attrs,
+			{
+				"stroke":"black",
+				"stroke-width":"0.5",
+				"fill":"none",
+				"stroke-opacity":0.6,
+			}
+		)
+		
+		return Svg.createElement("line", attrs)
+	}
 
 	static circle(pos, r, attrs={}){
 		attrs.r = r
@@ -112,75 +162,108 @@ class Svg{
 	}
 	
 	static text(pos, content, attrs={}){
+		// anchor_point : point on text bounding box that
+		// should coincide with `pos`
 		attrs.x = pos[0]
 		attrs.y = pos[1]
-		attrs.textContent = content
 		
 		O.insertIfNotPresent(
 			attrs,
 			{
+				style:"font-size : inherit;",
 				"text-anchor":"middle",
 				"font-family":"sans-serif",
-				"font-size" : 8,
 				"stroke":"none",
 				"stroke-width":"0.5",
 				"fill":"black",
 				"stroke-opacity":0.3,
+				//"lengthAdjust" : "spacingAndGlyphs",
+				//"textLength": "1cm",
 			}
 		)
 		
-		return Svg.createElement('text', attrs)
+		let text_el = Svg.createElement('text', attrs)
+		text_el.textContent = content
+		return text_el
+	}
+}
+
+class SvgContainer{
+	constructor(
+			svg, // svg to use as container
+			//transform = T.identity, // transform to apply to all things
+		){
+		this.root = svg
+		//this.transform = transform
 	}
 	
-	constructor({
-			scale = V.from(4,6), //
-			scale_units = "cm", //
-			viewbox_rect = new R(0,0,scale[0],scale[1])
-		}){
-		this.parent_element = null
-		this.scale = scale
-		this.scale_units = scale_units
-		this.viewbox_rect = viewbox_rect
-		
-		this.svg = createSvgElement('svg', {
-			width:`${this.scale[0]}${this.scale_units}`, // width of svg element
-			height:`${this.scale[1]}${this.scale_units}`, // height of svg element
-			viewBox : viewbox_rect.asString(), // viewbox of svg element
-		})
-		
-		
-		this.groups = new Map()
-	}
-	
-	renderToTarget(){
-		this.parent_element.replaceChildren(this.svg)
-	}
-	
-	setTarget(parent_element){
-		this.parent_element = parent_element
-	}
-	
-	addGroup(group_name, attrs={}, parent=null){
-		if (group_name === null){
-			return
+	add(tag, ...args){
+		switch(tag){
+			case "text":
+				return this.addText(...args)
+				break
+			default:
+				let element = Svg[tag](...args)
+				this.root.appendChild(element)
+				return element
 		}
-		parent = parent===null ? this.svg : parent
-		let group = Svg.createElement('g', attrs)
-		(parent===null ? this.svg : parent).appendChild(group)
-		this.groups.set(group_name, group)
 	}
 	
-	getGroup(group_name=null){
-		return group_name===null ? this.svg : this.groups.get(group_name)
+	clear(){
+		this.root.replaceChildren()
 	}
 	
-	hasGroup(group_name){
-		return this.groups.has(group_name)
-	}
-	
-	add(element_type, positions, scales, invariants, attrs, group_name = null){
-		console.log(element_type, positions, scales, invariants, attrs, group_name)
-		this.getGroup(group_name).appendChild(Svg[element_type](...positions, ...scales, ...invariants, attrs))
+	addText(pos, content, attrs={}, anchor_point=null){
+		// NOTE: anchor_point has its origin at the top left of the bounding box of the text
+		let text_el = Svg.text(pos, content, attrs)
+		this.root.appendChild(text_el)
+		
+		if (anchor_point === null){
+			switch(attrs["text-anchor"]){
+				case "start":
+					anchor_point = V.from(0,1)
+					break
+				case "middle":
+					anchor_point = V.from(0.5,1)
+					break
+				case "end":
+					anchor_point = V.from(1,1)
+					break
+				default:
+					anchor_point = V.from(0,1)
+			}
+		}
+		
+		//console.log("pos", pos)
+		//this.add("circle", pos, 0.2) // debug visuals
+		
+		let bbox = text_el.getBBox()
+		//this.add("rect", E.from(bbox.x, bbox.y, bbox.x+bbox.width, bbox.y+bbox.height), {"stroke":"red"}) // debug visuals
+		//console.log("bbox", bbox)
+		
+		let pos_anchor_in_bbox = V.prod(anchor_point, [bbox.width, bbox.height])
+		//console.log("pos_anchor_in_bbox", pos_anchor_in_bbox)
+		
+		let pos_anchor = V.add([bbox.x, bbox.y], pos_anchor_in_bbox)
+		//console.log("pos_anchor", pos_anchor)
+		//this.add("circle", pos_anchor, 0.2, {"stroke":"red"}) // debug visuals
+		
+		let diff = V.sub(pos_anchor, pos)
+		//console.log("diff", diff)
+		let new_pos = V.sub(pos, diff)
+		//console.log("new_pos", new_pos)
+		
+		text_el.setAttribute("x", new_pos[0])
+		text_el.setAttribute("y", new_pos[1])
+		
+		// Debug visuals
+		let debug_rect = new R(bbox.x-diff[0], bbox.y - diff[1], bbox.width, bbox.height)
+		//console.log("debug_rect", debug_rect)
+		//console.log("debug_rect_extent", E.fromRect(debug_rect))
+		//this.add("rect", E.fromRect(debug_rect))
+		
+		
+		return text_el
 	}
 	
 }

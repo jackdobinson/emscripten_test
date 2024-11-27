@@ -8,8 +8,8 @@ class P{
 	// Where n is the number of dimensions, and m is the number of points the path
 	static unit_path = V.from([0,0,1,1]) // x1,y1,x2,y2,...
 
-	static *interateOver(path, n=2){
-		for(i=0;i<path.length;i+=n){
+	static *iterateOver(path, n=2){
+		for(let i=0;i<path.length;i+=n){
 			yield path.subarray(i,i+n)
 		}
 	}
@@ -38,6 +38,66 @@ class P{
 			path[i+1] = p0[1] + (i/2)*dx*(p1[1] - p0[1])
 		}
 		return path
+	}
+	
+	static interpolatePointsAlong(path, n, ndim=2){
+		// given a path, interpolate n points along it (including end points)
+		let points = V.of_size(n*ndim)
+		// sum length of path
+		let pathlen = 0
+		let seglen = 0
+		let i = 0
+		for(const segment of P.iterateOver(path, 2*ndim)){
+			seglen = 0
+			for(i=0;i<ndim;++i){
+				seglen += (segment[ndim+i]-segment[i])*(segment[ndim+i]-segment[i])
+			}
+			pathlen += Math.sqrt(seglen)
+		}
+		console.log("pathlen", pathlen)
+		
+		// distance to emit points
+		let k=0
+		let j=0
+		let delta = pathlen/(n-1)
+		let frac_along_segment = 0
+
+		pathlen = 0 // reset to zero
+		// Loop over segments and emit points
+		for(const segment of P.iterateOver(path, 2*ndim)){
+			console.log("segment", segment)
+			seglen = 0
+			for(i=0;i<ndim;++i){
+				seglen += (segment[ndim+i]-segment[i])*(segment[ndim+i]-segment[i])
+			}
+			seglen = Math.sqrt(seglen)
+			frac_along_segment = (j*delta - pathlen)/seglen
+			console.log("pathlen", pathlen)
+			console.log("seglen", seglen)
+			
+			
+			while(frac_along_segment <= 1){
+				console.log("frac_along_segment", frac_along_segment)
+				// this segment has a point we should emit
+				
+				//console.log(segment.subarray(ndim,2*ndim)) // end
+				//console.log(segment.subarray(0,ndim)) // start
+				//console.log(V.sub(segment.subarray(ndim,2*ndim),segment.subarray(0,ndim))) // vector along segment
+				//console.log(V.scalar_prod(V.sub(segment.subarray(ndim,2*ndim),segment.subarray(0,ndim)), frac_along_segment)) // fraction along segment
+				//console.log( V.add(segment.subarray(0,ndim), V.scalar_prod(V.sub(segment.subarray(ndim,2*ndim),segment.subarray(0,ndim)), frac_along_segment)))
+				
+				let a = V.add(segment.subarray(0,ndim), V.scalar_prod(V.sub(segment.subarray(ndim,2*ndim),segment.subarray(0,ndim)), frac_along_segment))
+				for(k=0; k<ndim; k++){
+					points[j*ndim + k] = a[k] 
+				}
+				
+				
+				j++
+				frac_along_segment = (j*delta - pathlen)/seglen
+			}
+			pathlen += seglen
+		}
+		return points
 	}
 	
 	static toSvgLinearPath(path){

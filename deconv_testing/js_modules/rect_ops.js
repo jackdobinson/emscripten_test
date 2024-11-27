@@ -9,6 +9,16 @@ class R{
 	static fromPoints(p){
 		return new R(p[0][0],p[0][1],p[1][0]-p[0][0],p[1][1]-p[0][1])
 	}
+	
+	static fromExtent(e){
+		return new R(e[0], e[1], e[2]-e[0], e[3]-e[1])
+	}
+
+	static fromUnitRectWithinRect(r, u){
+		// u is a unit rect within r
+		// u = (0,0,1,1) should return r
+		return new R(...V.add(r.r, V.prod(u.r, r.s)), ...V.prod(r.s, u.s))
+	}
 
 	constructor(x,y,w,h){
 		this.r = V.from(x,y)

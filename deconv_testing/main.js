@@ -45,13 +45,24 @@ let svg_figure = new SvgFig(
 
 let plot_name_map = new Map();
 
+let figure = new Figure({
+	container : document.getElementById("progress-plots")
+})
+
+figure.appendPlotAreaFromRect("fabs_record", new R(0.1,0.1,0.8,0.8))
+figure.plot_areas.get("fabs_record").appendDataAreaFromRect("fabs_record_data_area", new R(0.1,0.1,0.8,0.8))
+figure.plot_areas.get("fabs_record").data_areas.get("fabs_record_data_area").appendAxesFromExtent("fabs_axes", E.from(1.2,-0.9,3.7,2))
+
+/*
 let figure_display = new SvgDisplay({
 	renderTarget: document.getElementById("progress-plots"),
 	d_scale:V.from(6,4), 
 	d_scale_units:"cm"
 })
 
-figure_display.addFigure("fabs_record", new Figure({f_rect_in_d : new R(1,3,4,-2)}))
+//figure_display.addFigure("fabs_record", new Figure({f_rect_in_d : new R(0,1,1,-1)}))
+//figure_display.addFigureWithAspectRatio("fabs_record")
+figure_display.addFigureOnGrid("fabs_record")
 
 figure_display.figures.get("fabs_record").addPlotArea("pa_1", new PlotArea({p_rect_in_f : new R(0.1,0.1,0.8,0.8)}))
 
@@ -59,7 +70,7 @@ figure_display.figures.get("fabs_record").plot_areas.get("pa_1").addDataArea("da
 
 figure_display.render()
 figure_display.renderer.renderToTarget()
-
+*/
 download_clean_map_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 

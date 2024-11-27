@@ -81,10 +81,17 @@ class V{
 	static check_length(v1,v2){
 		//console.trace()
 		if (v1.length != v2.length){
-			Error('Vectors muse be of equal length to assign')
+			throw new Error('Vectors must be of equal length to assign')
 		}
 	}
 
+	static copyTo(v1, v2){
+		V.check_length(v1,v2)
+		for(let i=0; i<v1.length; i++){
+			v1[i] = v2[i]
+		}
+		return v1
+	}
 
 	static assign(v1, v2){
 		V.check_length(v1, v2)
@@ -100,6 +107,20 @@ class V{
 			v1[i] = args[i]
 		}
 		return v1
+	}
+	
+	static block_apply(func, v1, v2, n=2){
+		// apply func over blocks of the first argument
+		// func(v1[0:n], v2)
+		// func(v1[n:2n], v2)
+		// func(v1[2n:3n], v2)
+		// ...
+		assert(Number.isInteger(v1.length/n), "When block applying, must have an integral number of blocks")
+		let r = V.new_like(v1)
+		for(let i=0; i<v1.length/n; ++i){
+			V.copyTo(r.subarray(i*n,(i+1)*n), func(v1.subarray(i*n,(i+1)*n), v2))
+		}
+		return r
 	}
 
 	static mutate(v1, mutator, predicate=(i,v)=>{return true}){
@@ -281,6 +302,27 @@ class V{
 		return r
 	}
 
+	static min(v1){
+		let a = v1[0]
+		for(const b of v1){
+			if (b < a){
+				a = b
+			}
+		}
+		return a
+	}
+	
+	static max(v1){
+		let a = v1[0]
+		for(const b of v1){
+			if (b > a){
+				a = b
+			}
+		}
+		return a
+	}
+
 }
+
 
 

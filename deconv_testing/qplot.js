@@ -127,6 +127,30 @@ function formatNumber(a, sig_figs=3, round_to=1E-12){
 }
 
 
+RepresentationDimensionDefaultStyles = {
+	"colour" : [
+		"red",
+		"green",
+		"blue",
+		"purple",
+		"brown",
+		"yellow",
+	],
+	"marker" : [
+		"circle",
+		"square",
+		"triangle",
+		"cross",
+		"dot",
+		"plus",
+	],
+	"line" : [
+		"solid",
+		"dashed",
+		"dotted",
+	],
+}
+
 class Transformer{
 	// Want this to be able to apply matrix and general functional transforms
 	// therefore need to chain the transforms together
@@ -382,29 +406,494 @@ class DataSet{
 }
 
 
-RepresentationDimensionDefaultStyles = {
-	"colour" : [
-		"red",
-		"green",
-		"blue",
-		"purple",
-		"brown",
-		"yellow",
-	],
-	"marker" : [
-		"circle",
-		"square",
-		"triangle",
-		"cross",
-		"dot",
-		"plus",
-	],
-	"line" : [
-		"solid",
-		"dashed",
-		"dotted",
-	],
+
+class ReferenceFrame{
+	
+	static fromRect(parent_frame, this_rect_in_parent){
+		return new ReferenceFrame(
+			parent_frame,
+			R.getTransformFromUnitCoordsTo(this_rect_in_parent)
+		)
+	}
+	
+	static fromRectReverse(parent_frame, this_rect_in_parent){
+		return new ReferenceFrame(
+			parent_frame,
+			R.getTransformToUnitCoordsFrom(this_rect_in_parent)
+		)
+	}
+	
+	static fromExtent(parent_frame, this_extent_in_parent){
+		console.log("this_extent_in_parent", this_extent_in_parent)
+		return ReferenceFrame.fromRect(parent_frame, R.fromExtent(this_extent_in_parent))
+	}
+
+	static fromExtentReverse(parent_frame, this_extent_in_parent){
+		console.log("this_extent_in_parent", this_extent_in_parent)
+		return ReferenceFrame.fromRectReverse(parent_frame, R.fromExtent(this_extent_in_parent))
+	}
+	
+	constructor(
+		parent_frame = null,
+		toParent_transform = T.identity,
+		child_frames = []
+	){
+		assert(parent_frame !== undefined, "parent frame cannot be undefined, but may be null")
+		this.parent_frame = parent_frame
+		console.log("this.parent_frame", this.parent_frame)
+		
+		
+		
+		// transform to previous reference frame
+		this.toParent_transform = toParent_transform
+		this.child_frames = child_frames
+		
+		this.toRoot_transform = null
+		this.updateRootTransform()
+	}
+	
+	updateRootTransform(){
+		this.toRoot_transform = T.prod(
+			this.parent_frame === null ? T.identity : this.parent_frame.toRoot_transform, 
+			this.toParent_transform
+		)
+	}
+	
+	addChild(fromChild_transform){
+		this.child_frames.push(new ReferenceFrame(this, fromChild_transform))
+	}
+	
+	addChildFromRect(child_rect_in_this){
+		this.child_frames.push(ReferenceFrame.fromRect(this, child_rect_in_this))
+	}
+	
+	addChildFromExtent(child_extent_in_this){
+		this.child_frames.push(ReferenceFrame.fromExtent(this, child_extent_in_this))
+	}
+	
 }
+
+
+class Axis{
+	static n_instances = 0
+	
+	constructor({
+		index,
+		ndim,
+		fromData_transform,
+		toRoot_transform,
+		containing_rect,
+		pos_in_rect = 1,
+		name = null,
+		
+	}={}){
+		Axis.n_instances++
+		this.name = (name===null) ? `axis_${Axis.n_instances}` : name
+		this.index = index
+		this.ndim = ndim
+		this.fromData_transform = fromData_transform
+		this.toRoot_transform = toRoot_transform
+		this.containing_rect = containing_rect
+		this.pos_in_rect = pos_in_rect
+		this.display_direction_factors = V.ones(this.ndim)
+		this.display_direction_factors[1] = 0
+		
+		this.path = null
+		this.tick_set = []
+		this.tick_label_pos_set = []
+		this.tick_label_set = []
+		this.tick_label_anchor_pos = null
+		
+		
+		
+		
+		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
+		
+		this.line_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-line`, this.svg, {}))
+		this.label_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-label`, this.svg, {}))
+		this.tick_set_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-ticks`, this.svg, {}))
+		this.tick_label_set_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-tick-labels`, this.svg, {}))
+		
+	}
+	
+	addSvgTo(parent){
+		parent.appendChild(this.svg.root)
+	}
+	
+	updateRootTransform(transform){
+		this.toRoot_transform = transform
+		this.calc()
+		this.draw()
+	}
+	
+	calc(rect){
+		this.calcLine(rect)
+		this.calcTicks()
+		this.calcTickLabelPositions()
+		this.calcTickLabels()
+	}
+	
+	draw(){
+		this.drawLine()
+		this.drawTicks()
+		this.drawTickLabels()
+	}
+	
+	calcLine(){
+		//console.log("this.containing_rect", this.containing_rect)
+		let a = V.const_of_size(this.ndim, this.pos_in_rect)
+		a[this.index] = 0
+		//console.log("a", a)
+		let b = V.unit(this.index, this.ndim)
+		//console.log("b", b)
+		let start = V.add(V.prod(a,this.containing_rect.s), this.containing_rect.r)
+		//console.log("start", start)
+		this.path = V.from(
+			...start,
+			...V.add(start, b)
+		)
+		//console.log("this.path", this.path)
+	}
+	
+	drawLine(attrs={"stroke":"black"}){
+		this.line_svg_holder.clear()
+		
+		this.line_svg_holder.add(
+			"line",
+			T.apply_block(this.toRoot_transform, this.path),
+			attrs
+		)
+	}
+	
+	calcTicks(n_ticks=6, tick_length=0.02, tick_direction=-1){
+		console.log("this.path", this.path)
+		let tick_displacement = V.scalar_prod(V.sub(V.ones(this.ndim),V.unit(this.index, this.ndim)), tick_direction*tick_length)
+		console.log("tick_displacement",tick_displacement)
+		
+		let starts = P.interpolatePointsAlong(this.path, n_ticks, this.ndim)
+		console.log("starts", starts)
+		let ends = V.block_apply(V.add, starts, tick_displacement, this.ndim)
+		console.log("ends", ends)
+		
+		this.tick_set = []
+		for(let i=0;i<n_ticks;i++){
+			this.tick_set.push(
+				V.from(...starts.subarray(i*this.ndim, (i+1)*this.ndim), ...ends.subarray(i*this.ndim, (i+1)*this.ndim))
+			)
+		}
+		
+	}
+	
+	drawTicks(
+			attrs={
+				stroke:"black",
+				"stroke-width":0.2
+			}
+		){
+		this.tick_set_svg_holder.clear() // remove all previous ticks
+		
+		for(const [i, tick] of this.tick_set.entries()){
+			this.tick_set_svg_holder.add(
+				"line",
+				T.apply_block(this.toRoot_transform, tick),
+				attrs
+			)
+		}
+	}
+	
+	calcTickLabelPositions(offset=0.1){
+		this.tick_label_pos_set = []
+		this.tick_label_anchor_pos = V.scalar_prod(
+			this.display_direction_factors,
+			this.pos_in_rect
+		)
+		this.tick_label_anchor_pos[this.index] = 0.5
+		
+		console.log("this.tick_label_anchor_pos", this.tick_label_anchor_pos)
+		
+		for(const [i, tick] of this.tick_set.entries()){
+			this.tick_label_pos_set.push(
+				V.add(
+					tick.subarray(0,this.ndim),
+					V.scalar_prod(
+						V.sub(tick.subarray(this.ndim,2*this.ndim), tick.subarray(0,this.ndim)),
+						1+offset
+					)
+				)
+			)
+		}
+	}
+	
+	calcTickLabels(){
+		this.tick_label_set = []
+		
+		for(const [i, tick] of this.tick_set.entries()){
+			this.tick_label_set.push(
+				Svg.formatNumber(
+					T.apply(this.fromData_transform, tick)[this.index]
+				)
+			)
+		}
+	}
+	
+	drawTickLabels(){
+		for(let i=0; i<this.tick_label_set.length; i++){
+			this.tick_set_svg_holder.add(
+				"text",
+				T.apply(this.toRoot_transform, this.tick_label_pos_set[i]),
+				this.tick_label_set[i],
+				{},
+				this.tick_label_anchor_pos
+			)
+		}
+	}
+	
+}
+
+class AxesSet{
+	static n_instances = 0
+	
+	constructor({
+		name = null,
+		parent_frame = null,
+		extent_in_data_coords = E.from(0,0,1,1)
+	} = {}){
+		console.log("name", name)
+		
+		AxesSet.n_instances++
+		this.ndim = extent_in_data_coords.length/2
+		this.name = (name===null) ? `axes_set_${AxesSet.n_instances}` : name
+		this.extent_in_data_coords = extent_in_data_coords
+		
+		// TODO: Have a think about if this is the best place for the data
+		// transform. Maybe it would be better in the `DataArea`?
+		this.frame = ReferenceFrame.fromExtent(parent_frame, this.extent_in_data_coords)
+		
+		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+
+		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
+
+		this.axis_list = []
+		this.axis_list.push(new Axis({
+			index : 0,
+			ndim : 2,
+			fromData_transform : this.frame.toParent_transform,
+			toRoot_transform : this.frame.parent_frame.toRoot_transform,
+			containing_rect : new R(0,-0.1,1,0.1),
+			name : "X"
+		}))
+		this.axis_list.push(new Axis({
+			index : 1,
+			ndim : 2,
+			fromData_transform : this.frame.toParent_transform,
+			toRoot_transform : this.frame.parent_frame.toRoot_transform,
+			containing_rect : new R(-0.1,0,0.1,1),
+			name : "Y"
+		}))
+		
+	}
+	
+	addSvgTo(parent){
+		parent.appendChild(this.svg.root)
+	}
+	
+	
+	draw(
+			rect, // rectangle where the axes should be drawn
+		){
+		this.svg.clear()
+		for(const axis of this.axis_list){
+			axis.addSvgTo(this.svg.root)
+			axis.calc(rect)
+			axis.draw(this.frame.toRoot_transform)
+		}
+	}
+}
+
+class DataArea{
+	static n_instances = 0
+	
+	constructor({
+		name = null,
+		parent_frame = null,
+		rect_in_parent = new R(0,0,1,1)
+	} = {}){
+		console.log("name", name)
+		
+		DataArea.n_instances++
+		this.name = (name===null) ? `data_area_${PlotArea.n_instances}` : name
+		this.rect_in_parent = rect_in_parent
+		this.frame = ReferenceFrame.fromRect(parent_frame, this.rect_in_parent)
+		
+		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+		
+		this.axes = new Map()
+		this.datasets = new Map()
+		
+		
+		
+		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
+		
+		
+		
+	}
+	
+	addSvgTo(parent){
+		parent.appendChild(this.svg.root)
+	}
+	
+	draw(){
+		this.svg.add(
+			"rect",
+			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),
+			{stroke:"blue"}
+		)
+	}
+	
+	appendAxes(name, axes){
+		this.axes.set(name, axes)
+		axes.addSvgTo(this.svg.root)
+		this.frame.addChild(axes.frame)
+		axes.draw(new R(0,0,1,1))
+	}
+	
+	appendAxesFromExtent(name, extent){
+		this.appendAxes(
+			name,
+			new AxesSet({
+				name : name,
+				parent_frame : this.frame,
+				extent_in_data_coords : extent,
+			})
+		)
+	}
+	
+}
+
+
+class PlotArea{
+	static n_instances = 0
+	
+	constructor({
+		name = null,
+		parent_frame = null,
+		rect_in_parent = new R(0,0,1,1)
+	} = {}){
+		console.log("name", name)
+		
+		PlotArea.n_instances++
+		this.name = (name===null) ? `plot_area_${PlotArea.n_instances}` : name
+		this.rect_in_parent = rect_in_parent
+		this.frame = ReferenceFrame.fromRect(parent_frame, this.rect_in_parent)
+		
+		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+		
+		this.data_areas = new Map()
+		
+		
+		
+		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
+		
+		
+	}
+	
+	addSvgTo(parent){
+		parent.appendChild(this.svg.root)
+	}
+	
+	draw(){
+		this.svg.add(
+			"rect",
+			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),
+			{stroke:"green"}
+		)
+		this.svg.add(
+			"text",
+			T.apply(this.frame.toRoot_transform, V.from(0.5,1)),
+			this.name,
+			{},
+			V.from(0.5,0)
+		)
+	}
+	
+	appendDataArea(name, data_area){
+		this.data_areas.set(name, data_area)
+		data_area.addSvgTo(this.svg.root)
+		this.frame.addChild(data_area.frame)
+		data_area.draw()
+	}
+	
+	appendDataAreaFromRect(name, d_rect_in_p){
+		this.appendDataArea(
+			name, 
+			new DataArea({
+				name : name,
+				parent_frame : this.frame,
+				rect_in_parent : d_rect_in_p
+			})
+		)
+	}
+}
+
+class Figure{
+	constructor({
+		container,
+		shape = V.from(6,4),
+		units = "cm",
+		scale = 10,
+	} = {}){
+		
+		this.container = container
+		// Unit coords go from zero to one in each dimension
+		this.aspect_ratio = shape[0]/shape[1] // dx/dy
+		this.f_rect_in_s = new R(0,scale*shape[1],scale*shape[0],-scale*shape[1])
+		
+		this.frame = ReferenceFrame.fromRect(null, this.f_rect_in_s)
+		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+		
+		this.plot_areas = new Map()
+		
+		this.svg = new SvgContainer(Svg.svg(shape, units, scale, {"style":`font-size:${Math.abs(V.min(V.div(shape,V.from(200, 100))))}${units};`}))
+		
+		
+		
+		this.container.appendChild(this.svg.root)
+		
+		this.draw()
+	}
+	
+	draw(){
+		this.svg.add(
+			"rect",
+			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),
+			{stroke:"red"}
+		)
+	}
+	
+	appendPlotArea(name, plot_area){
+		this.plot_areas.set(name, plot_area)
+		plot_area.addSvgTo(this.svg.root)
+		this.frame.addChild(plot_area.frame)
+		plot_area.draw()
+	}
+	
+	appendPlotAreaFromRect(name, p_rect_in_f){
+		this.appendPlotArea(
+			name, 
+			new PlotArea({
+				name : name,
+				parent_frame : this.frame,
+				rect_in_parent : p_rect_in_f
+			})
+		)
+	}
+	
+	
+}
+
+
+
+/*
 
 class Representation{
 	// This class is responsible for transforming dataset values to the data area coords
@@ -595,6 +1084,7 @@ class PlotArea{
 }
 
 class Figure{
+
 	constructor({
 		f_rect_in_d = new R(0.1,0.1,0.8,-0.8), // rectangle that defines the figure position in display coords
 	}={}){
@@ -603,7 +1093,7 @@ class Figure{
 		this.f2d_transform = null // set in a method
 		this.updateTransform()
 		
-		
+		this.toScreen_transform = new Transformer()
 		this.plot_areas = new Map()
 		
 	}
@@ -612,16 +1102,14 @@ class Figure{
 		this.plot_areas.set(name, plot_area)
 	}
 	
-	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
-		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
+	draw(renderer, element_type, positions, scales, invariants, attrs, group_name = null){
+		renderer.add(element_type, this.toScreen_transform.block_forward(...positions), this.toScreen_transform.block_forward_scale(...scales), invariants, attrs, group_name)
 	}
 	
-	render(renderer, transform=new Transformer()){
-		let f2s_transform = Transformer.combine(this.f2d_transform, transform)
-
+	render(renderer){
 		console.log(this.f_rect_in_d)
 		// Debug box
-		this.draw(renderer, transform, "rect", [this.f_rect_in_d.r], [this.f_rect_in_d.s], [], {
+		this.draw(renderer, "rect", [this.f_rect_in_d.r], [this.f_rect_in_d.s], [], {
 			"stroke":"green",
 			"stroke-width":"0.1",
 		})
@@ -630,14 +1118,17 @@ class Figure{
 		// plot_area
 		for(const [name, plot_area] of this.plot_areas.entries()){
 			plot_area.render(
-				renderer, 
-				f2s_transform
+				renderer
 			)
 		}
 	}
 
 	updateTransform(){
 		this.f2d_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.f_rect_in_d))
+	}
+
+	updateScreenTransform(transform){
+		this.toScreen_transform = Transformer.combine(this.f2d_transform, transform)
 	}
 
 }
@@ -649,10 +1140,18 @@ class SvgDisplay{
 		s_scale = V.from(6,4), // display scale
 		s_scale_units = "cm", //units of display scale
 	}={}){
+		
 		this.s_scale = s_scale
 		this.s_scale_units = s_scale_units
-		this.d_rect_in_s = new R(0,0,this.s_scale[0],this.s_scale[1])
-		//this.d_rect_in_d = new R(0,0,1,1)
+		
+		// Unit coords go from zero to one in each dimension
+		this.d_rect_in_s = new R(0,this.s_scale[1],this.s_scale[0],-this.s_scale[1])
+		//this.d_rect_in_s = new R(0,0,1,1)
+		
+		this.frame = new ReferenceFrame(
+			null,
+			R.getTransformFromUnitCoordsTo(this.d_rect_in_s),
+		)
 		
 		this.renderer = new Svg({
 			scale : s_scale,
@@ -669,12 +1168,69 @@ class SvgDisplay{
 	}
 	
 	updateTransform(){
-		//this.d2s_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.d_rect_in_s))
-		this.d2s_transform = new Transformer()
+		this.d2s_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.d_rect_in_s))
+		//this.d2s_transform = new Transformer()
 	}
 	
 	addFigure(name, figure){
+		figure.updateScreenTransform(this.d2s_transform)
 		this.figures.set(name, figure)
+	}
+	
+	addFigureFull(name, extent=E.from(0,0,1,1)){
+		this.addFigure(
+			name,
+			new Figure({f_rect_in_d : R.fromExtent(extent)})
+		)
+	}
+	
+	addFigureWithAspectRatio(name, aspect_ratio = 0.5, extent=E.from(0,0,1,1)){
+		if (aspect_ratio >= 1){
+			extent[2]/=aspect_ratio
+		} else {
+			extent[3]*=aspect_ratio
+		}
+		
+		let scaled_shape = V.scalar_div(V.from(...this.s_scale,...this.s_scale), V.min(this.s_scale))
+		console.log("scaled_shape", scaled_shape)
+		
+		let scaled_extent = V.div(extent, scaled_shape)
+		console.log("scaled_extent", scaled_extent)
+		let f_rect_in_d_close_to_unit_coords = R.fromExtent(scaled_extent)
+		console.log("f_rect_in_d_close_to_unit_coords", f_rect_in_d_close_to_unit_coords)
+	
+		this.addFigure(
+			name,
+			new Figure({f_rect_in_d : f_rect_in_d_close_to_unit_coords})
+		)
+	}
+	
+	addFigureOnGrid(name, gridspec=V.from(1,1), gridpos=V.from(0,0), unit_rect_in_grid_cell = new R(0.1,0.1,0.8,0.8)){
+		// gridspec : V(nx, ny)
+		// gridpos : V(ix, iy)
+		// NOTE: Grid indices go from top left instead of bottom left
+		
+		let grid_flow_start = V.from(0,(gridspec[1]-1)/gridspec[1]) // (0, 3/4)
+		let grid_flow_dir = V.from(1,-1)
+		
+		let grid_shape = V.div(V.ones(2), gridspec)
+		console.log("grid_shape", grid_shape)
+		
+		let grid_start =V.prod(grid_flow_dir, V.sub(V.prod(gridpos, grid_shape), grid_flow_start))
+		console.log("grid_start", grid_start)
+		
+		let full_grid_extent = E.from(...grid_start, ...(V.add(grid_start, grid_shape)))
+		console.log("full_grid_extent", full_grid_extent)
+		
+		let full_grid_rect = R.fromExtent(full_grid_extent)
+		
+		let grid_rect = R.fromUnitRectWithinRect(full_grid_rect, unit_rect_in_grid_cell)
+		
+		this.addFigure(
+			name,
+			new Figure({f_rect_in_d : grid_rect})
+		)
+		
 	}
 	
 	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
@@ -691,18 +1247,19 @@ class SvgDisplay{
 		// figures
 		for(const [name, figure] of this.figures.entries()){
 			let topright_of_figure = V.add(figure.f_rect_in_d.r, figure.f_rect_in_d.s)
-			this.renderer.add("text", [V.from(topright_of_figure[0]/2, topright_of_figure[1])], [], [name], {})
+			figure.draw(this.renderer, "text", [V.from(topright_of_figure[0]/2, topright_of_figure[1])], [], [name], {})
+			
 			figure.render(this.renderer, this.d2s_transform)
 		}
 	}
 	
 	setRendererTarget(renderTarget){
 		assert_all_defined(renderTarget)
-		this.renderer.setTarget(renderTarget)
+		this.renderer.attachTo(renderTarget)
 	}
 	
 }
-
+*/
 
 /*
 class DataArea{

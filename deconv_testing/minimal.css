@@ -42,6 +42,10 @@ canvas.emscripten { border: 0px none; background-color: black; }
 	to {transform: rotate(360deg);}
 }
 
+*{
+	font-size : inherit;
+}
+
 canvas {
 	width:100%;
 	height: 100%;

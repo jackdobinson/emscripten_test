@@ -19,7 +19,12 @@ class E{
 	}
 	
 	static fromRect(rect){
-		return V.from(rect.r[0], rect.r[0]+rect.s[0], rect.r[1], rect.r[1]+rect.s[1])
+		return V.from(
+			rect.s[0] > 0 ? rect.r[0] : rect.s[0]+rect.r[0], 
+			rect.s[1] > 0 ? rect.r[1] : rect.s[1]+rect.r[1], 
+			rect.s[0] > 0 ? rect.r[0] + rect.s[0] : rect.r[0],
+			rect.s[1] > 0 ? rect.r[1] + rect.s[1] : rect.r[1]
+		)
 	}
 	
 	static setExtent(extent, coord_idx, v){
