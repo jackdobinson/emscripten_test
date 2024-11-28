@@ -17,10 +17,10 @@ class T{
 	
 	static from(sx, sy, tx, ty){
 		const t = new Float64Array(6)
-		t[0] = sx
+		t[0] = (sx ==0) ? 100*Number.EPSILON : sx 
 		t[1] = 0
 		t[2] = 0
-		t[3] = sy
+		t[3] = (sy == 0) ? 100*Number.EPSILON : sy
 		t[4] = tx
 		t[5] = ty
 		return t

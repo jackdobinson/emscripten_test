@@ -11,7 +11,9 @@ class R{
 	}
 	
 	static fromExtent(e){
-		return new R(e[0], e[1], e[2]-e[0], e[3]-e[1])
+		// Extent is {x_min, x_max, y_min, y_max, ...}
+		//return new R(e[0], e[1], e[2]-e[0], e[3]-e[1])
+		return new R(e[0], e[2], e[1]-e[0], e[3]-e[2])
 	}
 
 	static fromUnitRectWithinRect(r, u){

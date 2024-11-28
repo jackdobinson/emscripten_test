@@ -2,6 +2,7 @@
 
 class Svg{
 	static createElement(tag, attributes={}){
+		//console.trace()
 		let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
 		for (const key of Object.keys(attributes)){
 			element.setAttribute(key, attributes[key])
@@ -41,7 +42,7 @@ class Svg{
 				viewBox : `0 0 ${scale*shape[0]} ${scale*shape[1]}`, // viewbox of svg element
 			}
 		)
-		return createSvgElement('svg', attrs)
+		return Svg.createElement('svg', attrs)
 	}
 	
 	static n_group_instances
@@ -50,7 +51,15 @@ class Svg{
 		if (transform !== null){
 			attrs.transform = transform.toString()
 		}
-		return createSvgElement('g', attrs)
+		return Svg.createElement('g', attrs)
+	}
+	
+	static defs(attrs={}){
+		return Svg.createElement('defs', attrs)
+	}
+	
+	static marker(attrs={}){
+		return Svg.createElement('marker', attrs)
 	}
 	
 	static rect(extent, attrs={}){
@@ -98,7 +107,7 @@ class Svg{
 			attrs,
 			{
 				"stroke":"black",
-				"stroke-width":"0.5",
+				"stroke-width":0.5,
 				"fill":"none",
 				"stroke-opacity":0.3,
 			}
@@ -125,6 +134,12 @@ class Svg{
 		)
 		
 		return Svg.createElement("line", attrs)
+	}
+	
+	static polyline(path, attrs={}){
+		attrs.points = path.toString()
+		
+		return Svg.createElement("polyline", attrs)
 	}
 
 	static circle(pos, r, attrs={}){
@@ -212,6 +227,8 @@ class SvgContainer{
 	clear(){
 		this.root.replaceChildren()
 	}
+	
+	
 	
 	addText(pos, content, attrs={}, anchor_point=null){
 		// NOTE: anchor_point has its origin at the top left of the bounding box of the text

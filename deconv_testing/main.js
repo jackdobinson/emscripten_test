@@ -51,7 +51,17 @@ let figure = new Figure({
 
 figure.appendPlotAreaFromRect("fabs_record", new R(0.1,0.1,0.8,0.8))
 figure.plot_areas.get("fabs_record").appendDataAreaFromRect("fabs_record_data_area", new R(0.1,0.1,0.8,0.8))
-figure.plot_areas.get("fabs_record").data_areas.get("fabs_record_data_area").appendAxesFromExtent("fabs_axes", E.from(1.2,-0.9,3.7,2))
+figure.plot_areas.get("fabs_record").appendAxesFromExtent("fabs_axes", E.from(NaN,NaN,NaN,NaN))
+
+//figure.plot_areas.get("fabs_record").appendAxesFromExtent("fabs_axes", E.from(-1.2,3.7,-0.9,2))
+figure.plot_areas.get("fabs_record").newDatasetForAxes("fabs_axes", "fabs_dataset")
+/*
+figure.plot_areas.get("fabs_record").setAsDataset([[0,1]])
+figure.plot_areas.get("fabs_record").appendToDataset([1,2])
+figure.plot_areas.get("fabs_record").appendToDataset([3,0.5])
+figure.plot_areas.get("fabs_record").appendToDataset([5,0.5])
+*/
+plot_name_map.set("fabs_record", figure.plot_areas.get("fabs_record"))
 
 /*
 let figure_display = new SvgDisplay({

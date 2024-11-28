@@ -100,7 +100,7 @@ character glyphs, we only want to apply transforms to where the text is placed.
 
 // QUESTION: How to hold style information for a graph?
 
-
+/*
 function createSvgElement(tag, attributes={}){
 	let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
 	for (const key of Object.keys(attributes)){
@@ -126,7 +126,9 @@ function formatNumber(a, sig_figs=3, round_to=1E-12){
 	return a.toPrecision(sig_figs)
 }
 
+*/
 
+/*
 RepresentationDimensionDefaultStyles = {
 	"colour" : [
 		"red",
@@ -404,8 +406,46 @@ class DataSet{
 		}
 	}
 }
+*/
 
 
+class Dataset{
+	constructor(
+		name
+	){
+		this.name = name
+		this.storage = [] // simplest for now
+		this.read_heads = new Map() // index of next data to read for axes that read data from dataset
+	}
+	
+	set(data){
+		this.storage = data
+	}
+	
+	push(data){
+		this.storage.push(data)
+	}
+	
+	*getNewData(axes_name){
+		let current_index = this.read_heads.get(axes_name)
+		if (current_index === undefined){
+			current_index = 0
+		}
+		
+		for(; current_index < this.storage.length; current_index++){
+			yield this.storage[current_index]
+		}
+		this.read_heads.set(axes_name, current_index)
+	}
+	
+	*getData(axes_name){
+		let current_index = 0
+		for(; current_index < this.storage.length; current_index++){
+			yield this.storage[current_index]
+		}
+		this.read_heads.set(axes_name, current_index)
+	}
+}
 
 class ReferenceFrame{
 	
@@ -495,10 +535,17 @@ class Axis{
 		this.toRoot_transform = toRoot_transform
 		this.containing_rect = containing_rect
 		this.pos_in_rect = pos_in_rect
+		O.assert_has_attributes(this, "name", "index", "ndim", "fromData_transform", "toRoot_transform", "containing_rect", "pos_in_rect")
+		
+		this.label_anchor_pos = V.scalar_prod(V.ones(this.ndim),0.5)
+		this.label_rotation = this.index*270 // rotation angle of axis lable
 		this.display_direction_factors = V.ones(this.ndim)
 		this.display_direction_factors[1] = 0
 		
+		
+		
 		this.path = null
+		this.label_pos = null
 		this.tick_set = []
 		this.tick_label_pos_set = []
 		this.tick_label_set = []
@@ -509,10 +556,10 @@ class Axis{
 		
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
 		
-		this.line_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-line`, this.svg, {}))
-		this.label_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-label`, this.svg, {}))
-		this.tick_set_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-ticks`, this.svg, {}))
-		this.tick_label_set_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-tick-labels`, this.svg, {}))
+		this.line_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-line`, null, {}))
+		this.label_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-label`, null, {}))
+		this.tick_set_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-ticks`, null, {}))
+		this.tick_label_set_svg_holder = new SvgContainer(this.svg.add("group",`group-${this.name}-axis-tick-labels`, null, {}))
 		
 	}
 	
@@ -528,6 +575,7 @@ class Axis{
 	
 	calc(rect){
 		this.calcLine(rect)
+		this.calcLabel()
 		this.calcTicks()
 		this.calcTickLabelPositions()
 		this.calcTickLabels()
@@ -535,6 +583,7 @@ class Axis{
 	
 	draw(){
 		this.drawLine()
+		this.drawLabel()
 		this.drawTicks()
 		this.drawTickLabels()
 	}
@@ -562,6 +611,31 @@ class Axis{
 			"line",
 			T.apply_block(this.toRoot_transform, this.path),
 			attrs
+		)
+	}
+	
+	calcLabel(label_offset_dir = -1, label_offset = 0.12){
+		
+		let delta = V.scalar_prod(V.sub(V.ones(this.ndim), V.unit(this.index, this.ndim)), label_offset_dir*label_offset)
+		this.label_pos = V.add(
+			V.scalar_div(
+				V.add(this.path.subarray(0,this.ndim), this.path.subarray(this.ndim, 2*this.ndim)),
+				this.ndim
+			),
+			delta
+		)
+	}
+	
+	drawLabel(){
+		let pos = T.apply(this.toRoot_transform, this.label_pos)
+		this.label_svg_holder.add(
+			"text", 
+			pos, 
+			this.name, 
+			{
+				transform : `rotate(${this.label_rotation} ${pos})`,
+			}, 
+			this.label_anchor_pos
 		)
 	}
 	
@@ -651,46 +725,150 @@ class Axis{
 }
 
 class AxesSet{
+	// Knows about the data coordinate system
+	// can transform from data coordinates to "dataArea" (unit) coordinates
+	// Need to attach to a data area to be able to visualise axes
+	
 	static n_instances = 0
 	
 	constructor({
 		name = null,
-		parent_frame = null,
-		extent_in_data_coords = E.from(0,0,1,1)
+		//parent_frame = null,
+		data_area = null, // place that data is draw into
+		extent_in_data_coords = E.from(0,1,0,1),
+		autoresize = [true, true], // autoresizing of each axis
 	} = {}){
 		console.log("name", name)
 		
 		AxesSet.n_instances++
 		this.ndim = extent_in_data_coords.length/2
 		this.name = (name===null) ? `axes_set_${AxesSet.n_instances}` : name
-		this.extent_in_data_coords = extent_in_data_coords
 		
-		// TODO: Have a think about if this is the best place for the data
-		// transform. Maybe it would be better in the `DataArea`?
-		this.frame = ReferenceFrame.fromExtent(parent_frame, this.extent_in_data_coords)
+		this.autoresize = autoresize
 		
-		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
-
+		this.registered_datasets = []
+		this.setExtent(extent_in_data_coords)
+		
+		//console.log("this.toAxis_transform", toAxis_transform)
+		
+		this.data_area = null
+		
+		
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
 
 		this.axis_list = []
-		this.axis_list.push(new Axis({
-			index : 0,
-			ndim : 2,
-			fromData_transform : this.frame.toParent_transform,
-			toRoot_transform : this.frame.parent_frame.toRoot_transform,
-			containing_rect : new R(0,-0.1,1,0.1),
-			name : "X"
-		}))
-		this.axis_list.push(new Axis({
-			index : 1,
-			ndim : 2,
-			fromData_transform : this.frame.toParent_transform,
-			toRoot_transform : this.frame.parent_frame.toRoot_transform,
-			containing_rect : new R(-0.1,0,0.1,1),
-			name : "Y"
-		}))
 		
+		
+		this.attachDataArea(data_area)
+		
+		console.log("this.data_area", this.data_area)
+		console.trace()
+		
+	}
+	
+	setExtent(extent_in_data_coords){
+		console.log("extent_in_data_coords2",extent_in_data_coords)
+		assert(this.ndim == extent_in_data_coords.length/2, "New extext must have same number of dimensions as old extent")
+		this.extent_in_data_coords = extent_in_data_coords
+		this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
+		
+		if (this.svg !== undefined){
+			this.createSpatialAxes()
+			this.draw()
+		}
+		
+		if (this.data_area !== null){
+			for(const dataset_name of this.registered_datasets){
+				this.data_area.setDatasetTransform(dataset_name, this.fromData_transform)
+			}
+		}
+		
+		
+	}
+	
+	registerDataset(dataset_name){
+		let idx = this.registered_datasets.indexOf(dataset_name)
+		if(idx < 0){
+			this.registered_datasets.push(dataset_name)
+		}
+		this.data_area.registerDataset(dataset_name, this.fromData_transform)
+	}
+	
+	deregisterDataset(dataset_name){
+		let idx = this.registered_datasets.indexOf(dataset_name)
+		if(idx < 0){
+			this.registered_datasets.splice(idx,1)
+		}
+		this.data_area.deregisterDataset(dataset_name)
+	}
+	
+	drawDataset(dataset){
+		let resize = false
+		for(const data of dataset.getNewData(this.name)){
+			resize = false
+			for(const [i,ar_flag] of this.autoresize.entries()){
+				if(ar_flag && !(this.extent_in_data_coords[i*2] <= data[i])){
+					resize = true
+					this.extent_in_data_coords[i*2] = data[i]
+				}
+				if(ar_flag && !(data[i] <= this.extent_in_data_coords[i*2 + 1])){
+					resize = true
+					this.extent_in_data_coords[i*2+1] = data[i]
+				}
+			}
+			
+			if (resize){
+				this.setExtent(this.extent_in_data_coords)
+			}
+		
+			this.data_area.drawData(dataset.name, data)
+		}
+	}
+	
+	attachDataArea(data_area){
+		if(data_area === null){
+			console.log("Warning: Attempting to attach null data_area to axes_set")
+			return
+		}
+		this.data_area = data_area
+		this.createSpatialAxes()
+	}
+	
+	createSpatialAxes(names = [], containing_rects = []){
+		this.axis_list = []
+		for(let i=0; i< this.data_area.dimensions.spatial; i++){
+			this.createAxis(
+				(names.length <= i) ? null : names[i],
+				(containing_rects.length <= i) ? null : containing_rects[i],
+			)
+		}
+	}
+	
+	createAxis(name=null, containing_rect = null){
+		if(containing_rect===null){
+			let v_el = V.unit(this.axis_list.length, this.data_area.dimensions.spatial)
+			let v_not_el = V.sub(V.ones(this.data_area.dimensions.spatial), v_el)
+			let a = 0.1
+			containing_rect = new R(
+				...V.scalar_prod(
+					v_not_el,
+					-a
+				),
+				...V.add(
+					v_el,
+					V.scalar_prod(v_not_el, a)
+				)
+			)
+		}
+		console.log("containing_rect", containing_rect)
+		this.axis_list.push(new Axis({
+			index : this.axis_list.length,
+			ndim : this.data_area.dimensions.spatial,
+			fromData_transform : this.fromData_transform, // transform to go from data to "dataArea" (unit) coords
+			toRoot_transform : this.data_area.frame.toRoot_transform, // transform to go from "dataArea" (unit) coords to "root" (screen) coords
+			containing_rect : containing_rect,
+			name : (name === null) ? `axis-${this.axis_list.length}` : name
+		}))
 	}
 	
 	addSvgTo(parent){
@@ -699,24 +877,30 @@ class AxesSet{
 	
 	
 	draw(
-			rect, // rectangle where the axes should be drawn
+			rect= new R(0,0,1,1), // rectangle around which to draw axes (in "dataArea" coords)
 		){
 		this.svg.clear()
 		for(const axis of this.axis_list){
 			axis.addSvgTo(this.svg.root)
 			axis.calc(rect)
-			axis.draw(this.frame.toRoot_transform)
+			axis.draw(
+				this.data_area.frame.toRoot_transform, // transform to go from "dataArea" (unit) coords to "root" (screen) coords
+			)
 		}
 	}
 }
 
+
 class DataArea{
 	static n_instances = 0
-	
+		
 	constructor({
 		name = null,
 		parent_frame = null,
-		rect_in_parent = new R(0,0,1,1)
+		rect_in_parent = new R(0,0,1,1),
+		dimensions = {
+			spatial: 2,
+		},
 	} = {}){
 		console.log("name", name)
 		
@@ -724,16 +908,227 @@ class DataArea{
 		this.name = (name===null) ? `data_area_${PlotArea.n_instances}` : name
 		this.rect_in_parent = rect_in_parent
 		this.frame = ReferenceFrame.fromRect(parent_frame, this.rect_in_parent)
+		this.dimensions = dimensions
 		
 		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
 		
-		this.axes = new Map()
-		this.datasets = new Map()
-		
-		
-		
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
+		this.defs = new SvgContainer(this.svg.add("defs"))
 		
+		
+		this.next_dataset_index = 0 // dataset index counter
+		this.dataset_drawn_data = new Map() // map of dataset with drawn values (original values, not transformed)
+		this.dataset_indices = new Map() // map of dataset name to dataset index
+		this.dataset_transforms = new Map() // transform from data coords to DataArea coords
+		this.dataset_styles = new Map() // styles associated with each datset that is drawn to this DataArea
+		this.dataset_markers = new Map() // markers for each dataset 
+		this.dataset_svg_holders = new Map() // SVG holders for drawings of datasets
+		this.dataset_svg = new Map() // references all SVG for a dataset
+		
+		this.line_width = 0.3
+		this.marker_size = 5
+		this.colour_progression = [
+			"blue",
+			"red",
+			"green",
+			"purple",
+			"brown",
+			"orange",
+		]
+		
+	}
+	
+	getDatasetDrawnData(dataset_name){
+		let ddd = this.dataset_drawn_data.get(dataset_name)
+		if (ddd === undefined) {
+			ddd = []
+			this.dataset_drawn_data.set(dataset_name,ddd)
+		}
+		return ddd
+	}
+	
+	newDatasetMarker(dataset_name){
+		// override to customise marker generation
+		let dm = new SvgContainer(
+				this.defs.add(
+				"marker", 
+				{
+					id : `marker-${dataset_name}`,
+					viewBox : "0 0 3 3",
+					markerWidth : this.marker_size,
+					markerHeight: this.marker_size,
+					markerUnits : "strokeWidth",
+					orient : 0, //"auto",//"auto-start-reverse",
+					refX : 1.5,
+					refY: 1.5,
+					//preserveAspectRatio : "xMidyMid meet"
+				}
+			)
+		)
+			
+		dm.add(
+			"circle", 
+			V.scalar_prod(V.ones(this.dimensions.spatial), 1.5),
+			1,
+			this.getDatasetStyle(dataset_name).marker_style
+		)
+		
+		return dm
+	}
+	
+	getDatasetMarker(dataset_name){
+		let dm = this.dataset_markers.get(dataset_name)
+		if(dm === undefined){
+			dm = this.newDatasetMarker(dataset_name)
+			this.dataset_markers.set(dataset_name, dm)
+		}
+		return dm
+	}
+	
+	setDatasetTransform(dataset_name, fromData_transform){
+		console.log("fromData_transform", fromData_transform)
+		this.dataset_transforms.set(
+			dataset_name, 
+			T.prod(
+				this.frame.toRoot_transform,
+				T.invert(fromData_transform)
+			)
+		)
+		this.redrawData(dataset_name)
+	}
+	
+	getDatasetTransform(dataset_name){
+		return this.dataset_transforms.get(dataset_name)
+	}
+	
+	newDatasetHolder(dataset_name){
+		return new SvgContainer(
+			this.svg.add(
+				"group", 
+				`dataset-${dataset_name}`,
+				//`matrix(${this.getDatasetTransform(dataset_name)})`,
+				null, 
+				{}
+			)
+		)
+	}
+	
+	getDatasetHolder(dataset_name){
+		let dataset_svg_holder = this.dataset_svg_holders.get(dataset_name)
+		if (dataset_svg_holder === undefined){
+			dataset_svg_holder = this.newDatasetHolder(dataset_name)
+			this.dataset_svg_holders.set(dataset_name,dataset_svg_holder)
+		}
+		return dataset_svg_holder
+	}
+	
+	newDatasetStyle(dataset_name){
+		// This should be altered to have different style progression when adding new datasets
+		let colour = this.colour_progression[this.getDatasetIndex(dataset_name) % this.colour_progression.length]
+		let style_info = {
+			polyline_style : {
+				"marker-start" : `url(#marker-${dataset_name})`,
+				"marker-mid" : `url(#marker-${dataset_name})`,
+				"marker-end" : `url(#marker-${dataset_name})`,
+				"stroke" : colour,
+				"stroke-width" : this.line_width,
+				"fill" : "none",
+			},
+			marker_style : {
+				"stroke" : "none",//"context-stroke", // "none"
+				//"stroke" : colour,
+				"fill" : colour,//"context-fill", //colour,
+				//"fill" : "none",
+				"stroke-width" : 0.2,
+				"stroke-opacity" : 1,
+			},
+		}
+		return style_info
+	}
+	
+	getDatasetStyle(dataset_name){
+		let ds = this.dataset_styles.get(dataset_name)
+		if (ds === undefined){
+			ds = this.newDatasetStyle(dataset_name)
+			this.dataset_styles.set(dataset_name, ds)
+		}
+		return ds
+	}
+	
+	getDatasetIndex(dataset_name){
+		let di = this.dataset_indices.get(dataset_name)
+		if (di === undefined){
+			di = this.next_dataset_index
+			this.next_dataset_index++
+		}
+		return di
+	}
+	
+	registerDataset(dataset_name, fromData_transform){
+		this.setDatasetTransform(dataset_name, fromData_transform)
+		this.getDatasetIndex(dataset_name)
+		this.getDatasetStyle(dataset_name)
+		this.getDatasetHolder(dataset_name)
+		this.getDatasetMarker(dataset_name)
+	}
+	
+	deregisterDataset(dataset_name){
+		this.dataset_transforms.delete(dataset_name)
+		this.dataset_indices.delete(dataset_name)
+		this.dataset_styles.delete(dataset_name)
+		this.dataset_svg_holders.delete(dataset_name)
+		this.dataset_markers.delete(dataset_name)
+	}
+	
+	
+	clearData(dataset_name){
+		let dsh = this.getDatasetHolder(dataset_name)
+		if (dsh !== undefined){
+			dsh.clear()
+		}
+	}
+	
+	redrawData(dataset_name){
+		this.clearData(dataset_name)
+		let ddd = this.getDatasetDrawnData(dataset_name)
+		for(const data of ddd){
+			this.drawData(dataset_name, data, false)
+		}
+	}
+	
+	drawData(dataset_name, data, record_data = true){
+		// Draws a single data point
+		// This should be altered to draw different types of graph
+		// default is a line plot	
+			
+		let dataset_style = this.getDatasetStyle(dataset_name)
+		let dataset_svg_holder = this.getDatasetHolder(dataset_name)
+		
+		if(record_data) {
+			this.getDatasetDrawnData(dataset_name).push(data)
+		}
+		data = T.apply(this.getDatasetTransform(dataset_name),data)
+
+		if (dataset_svg_holder.root.children.length == 0){
+			//console.log("New polyline")
+			dataset_svg_holder.add(
+				"polyline",
+				data.toString(),
+				dataset_style.polyline_style
+			)
+		} 
+		else {
+			
+			let el = dataset_svg_holder.root.firstChild
+			
+			// May have to swap this for a DOMPoint at some time in the future
+			let p = el.ownerSVGElement.createSVGPoint()
+			p.x = data[0]
+			p.y = data[1]
+			el.points.appendItem(p)
+			
+			//el.setAttribute("points",  el.points.toString() + (" "+d.toString()))
+		}
 		
 		
 	}
@@ -750,23 +1145,7 @@ class DataArea{
 		)
 	}
 	
-	appendAxes(name, axes){
-		this.axes.set(name, axes)
-		axes.addSvgTo(this.svg.root)
-		this.frame.addChild(axes.frame)
-		axes.draw(new R(0,0,1,1))
-	}
 	
-	appendAxesFromExtent(name, extent){
-		this.appendAxes(
-			name,
-			new AxesSet({
-				name : name,
-				parent_frame : this.frame,
-				extent_in_data_coords : extent,
-			})
-		)
-	}
 	
 }
 
@@ -788,13 +1167,43 @@ class PlotArea{
 		
 		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
 		
+		this.current_axes = null
+		this.current_dataset = null
 		this.data_areas = new Map()
-		
+		this.axes = new Map()
+		this.datasets = new Map()
+		this.axes_for_dataset = new Map() // associate a dataset with one or more axes
 		
 		
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
 		
 		
+	}
+	
+	setAsDataset(data, dataset_name = null){
+		if(dataset_name === null){
+			dataset_name = this.current_dataset
+		}
+		this.datasets.get(dataset_name).set(data)
+		// send a message to axes for dataset telling it to draw the new point
+		for(const axes_name of this.axes_for_dataset.get(dataset_name)){
+			this.axes.get(axes_name).drawDataset(this.datasets.get(dataset_name))
+		}
+	}
+	
+	add_data_point(...data){
+		this.appendToDataset(data)
+	}
+	
+	appendToDataset(data, dataset_name = null){
+		if(dataset_name === null){
+			dataset_name = this.current_dataset
+		}
+		this.datasets.get(dataset_name).push(data)
+		// send a message to axes for dataset telling it to draw the new point
+		for(const axes_name of this.axes_for_dataset.get(dataset_name)){
+			this.axes.get(axes_name).drawDataset(this.datasets.get(dataset_name))
+		}
 	}
 	
 	addSvgTo(parent){
@@ -816,6 +1225,31 @@ class PlotArea{
 		)
 	}
 	
+	addDatasetToAxes(axes_name, dataset){
+		this.datasets.set(dataset.name, dataset)
+		let afd = this.axes_for_dataset.get(dataset.name)
+		if(afd === undefined){
+			afd = []
+		}
+		afd.push(axes_name)
+		this.axes_for_dataset.set(dataset.name, afd)
+		
+		let axes = this.axes.get(axes_name)
+		axes.registerDataset(dataset.name)
+		this.current_dataset = dataset.name
+		this.current_axes = axes
+	}
+	
+	newDatasetForAxes(axes_name, dataset_name = null){
+		let ds = new Dataset(
+			(dataset_name === null) ? `dataset-${this.datasets.size}` : dataset_name
+		)
+		this.addDatasetToAxes(axes_name, ds)
+		return ds.name
+	}
+	
+	
+	
 	appendDataArea(name, data_area){
 		this.data_areas.set(name, data_area)
 		data_area.addSvgTo(this.svg.root)
@@ -833,6 +1267,32 @@ class PlotArea{
 			})
 		)
 	}
+	
+	appendAxes(name, axes){
+		this.axes.set(name, axes)
+		axes.addSvgTo(this.svg.root)
+		this.frame.addChild(axes.frame)
+		axes.draw()
+		this.current_axes = axes
+	}
+	
+	appendAxesFromExtent(name, extent, data_area = null){
+		console.log(name, extent, data_area)
+		if(data_area === null){
+			if (this.data_areas.size > 0){
+				data_area = this.data_areas.values().next().value
+			}
+		}
+		this.appendAxes(
+			name,
+			new AxesSet({
+				name : name,
+				parent_frame : this.frame,
+				extent_in_data_coords : extent,
+				data_area : data_area
+			})
+		)
+	}
 }
 
 class Figure{
@@ -840,8 +1300,13 @@ class Figure{
 		container,
 		shape = V.from(6,4),
 		units = "cm",
-		scale = 10,
+		scale = null,
 	} = {}){
+		
+		if (scale === null){
+			// Assign scale so the largest value in "shape" (after multiplication by scale) is 100
+			scale = 100/V.max(shape)
+		}
 		
 		this.container = container
 		// Unit coords go from zero to one in each dimension
