@@ -202,8 +202,10 @@ class LinePlotArtist extends PlotTypeArtist {
 	static marker_style_defaults = {
 		"stroke" : "none",//"context-stroke", // "none"
 		"fill" : null,//"context-fill", //colour,
-		"stroke-width" : 0.2,
-		"stroke-opacity" : 1,
+		"fill-opacity" : 0.6,
+		"stroke-width" : 0.3,
+		"stroke-opacity" : 0.6,
+		"vector-effect" : "non-scaling-stroke",
 	}
 	
 	static line_style_defaults = {
@@ -211,8 +213,11 @@ class LinePlotArtist extends PlotTypeArtist {
 		"marker-mid" : null,
 		"marker-end" : null,
 		"stroke" : null,
-		"stroke-width" : 0.3,
+		"stroke-width" : 5,
+		"stroke-opacity" : 0.6,
 		"fill" : "none",
+		"fill-opacity" : 0.6,
+		"vector-effect" : "non-scaling-stroke",
 	}
 
 	constructor({
@@ -252,6 +257,9 @@ class LinePlotArtist extends PlotTypeArtist {
 	
 	setMarkerStyle(marker_style={}){
 		this.marker_style = O.insertIfNotPresent(marker_style, LinePlotArtist.marker_style_defaults)
+		if(this.marker_style.id === undefined){
+			this.marker_style.id = this.default_marker_name
+		}
 		if (this.marker_style["fill"] === null){
 			this.marker_style["fill"] = this.default_primary_colour
 		}
@@ -282,13 +290,13 @@ class LinePlotArtist extends PlotTypeArtist {
 				"marker", 
 				{
 					id : this.default_marker_name,
-					viewBox : "0 0 3 3",
-					markerWidth : 5,
-					markerHeight: 5,
+					viewBox : "-1 -1 2 2",
+					markerWidth : 3,
+					markerHeight: 3,
 					markerUnits : "strokeWidth",
 					orient : 0, //"auto",//"auto-start-reverse",
-					refX : 1.5,
-					refY: 1.5,
+					refX : 0,
+					refY: 0,
 				}
 			)
 		)
@@ -297,7 +305,7 @@ class LinePlotArtist extends PlotTypeArtist {
 			case "circle":
 				this.default_marker.add(
 					"circle", 
-					V.scalar_prod(V.ones(2), 1.5),
+					V.zeros(2),
 					1,
 					this.marker_style
 				)
@@ -321,6 +329,7 @@ class LinePlotArtist extends PlotTypeArtist {
 		p.x = data[0]
 		p.y = data[1]
 		this.line.points.appendItem(p)
+		
 	}
 }
 
@@ -490,7 +499,7 @@ class Axis{
 	calcLine(){
 		//console.log("this.containing_rect", this.containing_rect)
 		let a = V.const_of_size(this.ndim, this.pos_in_rect)
-		a[this.index] = 0
+		a[this.index] = 0 // {0,POS} for x axis, {POS,0} for y-axis
 		//console.log("a", a)
 		let b = V.unit(this.index, this.ndim)
 		//console.log("b", b)
@@ -518,8 +527,12 @@ class Axis{
 		)
 	}
 	
-	calcLabel(label_offset_dir = -1, label_offset = 0.12){
-		
+	calcLabel(label_offset = 0.12){
+		// if pos_in_rect > 0.5 should go in -ve direction, otherwise +ve direction
+		let label_offset_dir = -1
+		if(this.pos_in_rect <= 0.5){
+			label_offset_dir = 1
+		}
 		let delta = V.scalar_prod(V.sub(V.ones(this.ndim), V.unit(this.index, this.ndim)), label_offset_dir*label_offset)
 		this.label_pos = V.add(
 			V.scalar_div(
@@ -544,7 +557,12 @@ class Axis{
 		)
 	}
 	
-	calcTicks(n_ticks=6, tick_length=0.02, tick_direction=-1){
+	calcTicks(n_ticks=6, tick_length=0.02){
+		let tick_direction = -1
+		if(this.pos_in_rect <= 0.5){
+			tick_direction = 1
+		}
+	
 		console.log("this.path", this.path)
 		let tick_displacement = V.scalar_prod(V.sub(V.ones(this.ndim),V.unit(this.index, this.ndim)), tick_direction*tick_length)
 		console.log("tick_displacement",tick_displacement)
@@ -650,14 +668,18 @@ class AxesSet{
 		data_area = null, // place that data is draw into
 		extent_in_data_coords = E.from(0,1,0,1),
 		autoresize = [true, true], // autoresizing of each axis
+		axis_positions = [0,0], // positions to draw axis compared to data area
+		axis_names = [null,null], //names of component axis objects
 	} = {}){
-		console.log("name", name)
+		console.log("AxesSet::constructor name", name)
 		
 		AxesSet.n_instances++
 		this.ndim = extent_in_data_coords.length/2
 		this.name = (name===null) ? `axes_set_${AxesSet.n_instances}` : name
+		this.axis_names = axis_names
 		
 		this.autoresize = autoresize
+		this.axis_positions = axis_positions
 		
 		this.registered_datasets = []
 		this.setExtent(extent_in_data_coords)
@@ -809,19 +831,30 @@ class AxesSet{
 	}
 	
 	getDefaultContainingRect(ax_idx){
+		let axis_pos = (this.axis_positions[ax_idx] === null) ? 0 : this.axis_positions[ax_idx]
 		let v_el = V.unit(ax_idx, this.data_area.dimensions.spatial)
 		let v_not_el = V.sub(V.ones(this.data_area.dimensions.spatial), v_el)
 		let a = 0.1
-		return new R(
-			...V.scalar_prod(
-				v_not_el,
-				-a
-			),
-			...V.add(
-				v_el,
-				V.scalar_prod(v_not_el, a)
-			)
+		
+		let scale = V.add(
+			v_el,
+			V.scalar_prod(v_not_el, a)
 		)
+		
+		let pos = V.scalar_prod(v_not_el, axis_pos)
+		
+		if(axis_pos < 0.5){
+			pos = V.add(pos, V.scalar_prod(v_not_el, -a))
+		}
+		else if (axis_pos >= 0.5){
+			// do nothing
+		}
+		
+		return new R(
+			...pos,
+			...scale
+		)
+		
 	}
 	
 	createAxis(name=null, containing_rect = null){
@@ -835,7 +868,8 @@ class AxesSet{
 			fromData_transform : this.fromData_transform, // transform to go from data to "dataArea" (unit) coords
 			toRoot_transform : this.data_area.frame.toRoot_transform, // transform to go from "dataArea" (unit) coords to "root" (screen) coords
 			containing_rect : containing_rect,
-			name : (name === null) ? `axis-${this.axis_list.length}` : name
+			name : (this.axis_names[this.axis_list.length] === null) ?  `axis-${this.axis_list.length}` : this.axis_names[this.axis_list.length],
+			pos_in_rect : 1 - ((this.axis_positions[this.axis_list.length] === null) ? 0 : this.axis_positions[this.axis_list.length])
 		}))
 	}
 	
@@ -858,10 +892,12 @@ class AxesSet{
 	
 	draw(){
 		this.svg.clear()
-		for(const axis of this.axis_list){
-			axis.addSvgTo(this.svg.root)
-			axis.calc()
-			axis.draw()
+		for(const [i,axis] of this.axis_list.entries()){
+			if(this.axis_positions[i] !== null){
+				axis.addSvgTo(this.svg.root)
+				axis.calc()
+				axis.draw()
+			}
 		}
 	}
 }
@@ -888,13 +924,9 @@ class DataArea{
 		
 		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
 		
-		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
-		this.defs = new SvgContainer(this.svg.add("defs"))
-		
+		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))		
 		
 		this.next_dataset_index = 0 // dataset index counter
-		this.dataset_drawn_data = new Map() // map of dataset with drawn values (original values, not transformed)
-		this.dataset_indices = new Map() // map of dataset name to dataset index
 		this.dataset_transforms = new Map() // transform from data coords to DataArea coords
 		
 		this.dataset_plot_type_artists = new Map() // artist for each dataset
@@ -923,15 +955,6 @@ class DataArea{
 		return da
 	}
 	
-	getDatasetDrawnData(dataset_name){
-		let ddd = this.dataset_drawn_data.get(dataset_name)
-		if (ddd === undefined) {
-			ddd = []
-			this.dataset_drawn_data.set(dataset_name,ddd)
-		}
-		return ddd
-	}
-	
 	setDatasetTransform(dataset_name, fromData_transform){
 		//console.log("fromData_transform", fromData_transform)
 		this.dataset_transforms.set(
@@ -941,7 +964,7 @@ class DataArea{
 				T.invert(fromData_transform)
 			)
 		)
-		this.redrawData(dataset_name)
+		
 	}
 	
 	getDatasetTransform(dataset_name){
@@ -953,7 +976,6 @@ class DataArea{
 			this.svg.add(
 				"group", 
 				`dataset-${dataset_name}`,
-				//`matrix(${this.getDatasetTransform(dataset_name)})`,
 				null, 
 				{}
 			)
@@ -969,25 +991,14 @@ class DataArea{
 		return dataset_svg_holder
 	}
 	
-	getDatasetIndex(dataset_name){
-		let di = this.dataset_indices.get(dataset_name)
-		if (di === undefined){
-			di = this.next_dataset_index
-			this.next_dataset_index++
-		}
-		return di
-	}
-	
 	registerDataset(dataset_name, fromData_transform){
 		this.setDatasetTransform(dataset_name, fromData_transform)
-		this.getDatasetIndex(dataset_name)
 		this.getDatasetPlotTypeArtist(dataset_name)
 		this.getDatasetHolder(dataset_name)
 	}
 	
 	deregisterDataset(dataset_name){
 		this.dataset_transforms.delete(dataset_name)
-		this.dataset_indices.delete(dataset_name)
 		this.dataset_plot_type_artists.delete(dataset_name)
 		this.dataset_svg_holders.delete(dataset_name)
 	}
@@ -1000,20 +1011,8 @@ class DataArea{
 		}
 	}
 	
-	redrawData(dataset_name){
-		this.clearData(dataset_name)
-		let ddd = this.getDatasetDrawnData(dataset_name)
-		for(const data of ddd){
-			this.drawData(dataset_name, data, null, false)
-		}
-	}
-	
-	drawData(dataset_name, data, default_plot_type_artist = null, record_data = true){
-		//console.log("DataArea::drawData", dataset_name, data, record_data)
-		
-		if(record_data) {
-			this.getDatasetDrawnData(dataset_name).push(data)
-		}
+	drawData(dataset_name, data, default_plot_type_artist = null){
+		//console.log("DataArea::drawData", dataset_name, data, default_plot_type_artist)
 		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(T.apply(this.getDatasetTransform(dataset_name), data))
 		
 	}
@@ -1093,6 +1092,10 @@ class PlotArea{
 		this.appendToDataset(data)
 	}
 	
+	addDataToDataset(dataset_name, ...data){
+		this.appendToDataset(data, dataset_name)
+	}
+	
 	appendToDataset(data, dataset_name = null){
 		let axes = null
 		let dataset = null
@@ -1155,6 +1158,8 @@ class PlotArea{
 		this.axes_for_dataset.set(dataset.name, afd)
 		
 		let axes = this.axes.get(axes_name)
+		assert(axes !== undefined, `Attempting to add a dataset to axes name "${axes_name}" that does not exist. Axes names that exist are: ${Array.from(this.axes.keys())}`)
+		
 		axes.registerDataset(dataset.name)
 		this.current_dataset = dataset.name
 		this.current_axes = axes
@@ -1194,7 +1199,7 @@ class PlotArea{
 		this.current_axes = axes
 	}
 	
-	appendAxesFromExtent(name, extent, data_area = null){
+	appendAxesFromExtent(name, extent, axis_attrs = {}, data_area = null){
 		console.log(name, extent, data_area)
 		if(data_area === null){
 			if (this.data_areas.size > 0){
@@ -1203,12 +1208,14 @@ class PlotArea{
 		}
 		this.appendAxes(
 			name,
-			new AxesSet({
-				name : name,
-				parent_frame : this.frame,
-				extent_in_data_coords : extent,
-				data_area : data_area
-			})
+			new AxesSet(
+				O.insertIfNotPresent({
+					name : name,
+					parent_frame : this.frame,
+					extent_in_data_coords : extent,
+					data_area : data_area,
+				}, axis_attrs)
+			)
 		)
 	}
 }

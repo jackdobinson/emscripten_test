@@ -201,6 +201,20 @@ class Svg{
 		text_el.textContent = content
 		return text_el
 	}
+	
+	static use(pos, id, transform, transform_origin, attrs={}){
+		attrs.x = pos[0]
+		attrs.y = pos[1]
+		attrs.href = "#"+id
+		if(transform !== null ){
+			attrs.transform = transform
+		}
+		if(transform_origin !== null ){
+			attrs["transform-origin"] = transform_origin
+		}
+		
+		return Svg.createElement("use", attrs)
+	}
 }
 
 class SvgContainer{

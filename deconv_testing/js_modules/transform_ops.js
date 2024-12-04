@@ -4,6 +4,10 @@ class T{
 
 	static identity = Float64Array.from([1,0,0,1,0,0])
 
+	static toSvgString(t){
+		return "matrix(" + t.toString() + ")"
+	}
+
 	static ensure_full_rank(t){
 		// If transform is not full rank, add a very small amount to the
 		// scale elements to ensure the value is small but not completely zero

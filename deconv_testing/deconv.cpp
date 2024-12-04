@@ -74,7 +74,23 @@ EM_JS(void, js_plot_point, (const char* name, double x, double y), {
 		console.log(plot_name_map);
 		return;
 	}
-	plot_name_map.get(name).add_data_point(x,y);
+	plot_name_map.get(name).addDataToDataset(null,x,y);
+});
+
+EM_JS(void, js_plot_point_to_dataset, (const char* plot_name, const char* dataset_name, double x, double y), {
+	plot_name = UTF8ToString(plot_name);
+	dataset_name = UTF8ToString(dataset_name);
+	console.log("EM_JS: js_plot_point", x, y);
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if(!plot_name_map.has(plot_name)){
+		console.log("EM_JS: plot name not found", plot_name);
+		console.log(plot_name_map);
+		return;
+	}
+	plot_name_map.get(plot_name).addDataToDataset(dataset_name,x,y);
 });
 
 // TODO: 
@@ -436,9 +452,9 @@ void CleanModifiedAlgorithm::doIter(
 	
 	// magic values here for now
 	//update_js_plot("fabs_record", fabs_record.data(), fabs_record.size());
-	js_plot_point("fabs_record", i, fabs_record[i]);
-	js_plot_point("rms_record", i, rms_record[i]);
-	js_plot_point("threshold_record", i, threshold_record[i]);
+	js_plot_point_to_dataset("stopping_criteria", "fabs_record", i, fabs_record[i]);
+	js_plot_point_to_dataset("stopping_criteria", "rms_record", i, rms_record[i]);
+	js_plot_point_to_dataset("stopping_criteria", "threshold_record", i, threshold_record[i]);
 	//update_js_plot("threshold_record", threshold_record.data(), threshold_record.size());
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run

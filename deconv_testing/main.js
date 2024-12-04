@@ -49,73 +49,54 @@ let figure = new Figure({
 	container : document.getElementById("progress-plots")
 })
 
-figure.appendPlotAreaFromRect("fabs_record", new R(0.1,0.1,0.8,0.8))
-figure.plot_areas.get("fabs_record").appendDataAreaFromRect("fabs_record_data_area", new R(0.1,0.1,0.8,0.8))
-figure.plot_areas.get("fabs_record").appendAxesFromExtent("fabs_axes", E.from(NaN,NaN,NaN,NaN))
+figure.appendPlotAreaFromRect("stopping_criteria", new R(0.1,0.1,0.8,0.8))
+figure.plot_areas.get("stopping_criteria").appendDataAreaFromRect("stopping_criteria_data_area", new R(0.1,0.1,0.8,0.8))
+figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["iteration", "fabs/rms value"]})
+figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes_2", E.from(NaN,NaN,NaN,NaN), {axis_positions : [null, 1], axis_names : ["iteration", "threshold value"]})
 
 //figure.plot_areas.get("fabs_record").appendAxesFromExtent("fabs_axes", E.from(-1.2,3.7,-0.9,2))
-figure.plot_areas.get("fabs_record").newDatasetForAxes("fabs_axes", "fabs_dataset")
+figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes", "fabs_record")
+figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes", "rms_record")
+figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes_2", "threshold_record")
 
-figure.plot_areas.get("fabs_record").newDatasetForAxes("fabs_axes", "other_dataset")
+figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes", "test_1_dataset")
+figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes_2", "test_2_dataset")
 
-
-/*
-figure.plot_areas.get("fabs_record").setAsDataset([[0,1]])
-figure.plot_areas.get("fabs_record").appendToDataset([1,2])
-figure.plot_areas.get("fabs_record").appendToDataset([3,0.5])
-figure.plot_areas.get("fabs_record").appendToDataset([5,0.5])
-*/
-plot_name_map.set("fabs_record", figure.plot_areas.get("fabs_record"))
-
-let plt = plot_name_map.get("fabs_record")
-plt.setCurrentDataset("fabs_dataset")
-plt.add_data_point(0,0)
-plt.add_data_point(1,1)
-plt.add_data_point(2,4)
-plt.add_data_point(3,9)
-plt.add_data_point(4,16)
-plt.add_data_point(5,25)
-plt.add_data_point(6,36)
-plt.add_data_point(7,49)
-plt.add_data_point(8,64)
-plt.add_data_point(9,80)
-plt.add_data_point(10,100)
-plt.add_data_point(11,121)
-plt.add_data_point(12,144)
-
-plt.setCurrentDataset("other_dataset")
-plt.add_data_point(0,0.5*0)
-plt.add_data_point(1,0.5*1)
-plt.add_data_point(2,0.5*4)
-plt.add_data_point(3,0.5*9)
-plt.add_data_point(4,0.5*16)
-plt.add_data_point(5,0.5*25)
-plt.add_data_point(6,0.5*36)
-plt.add_data_point(7,0.5*49)
-plt.add_data_point(8,0.5*64)
-plt.add_data_point(9,0.5*80)
-plt.add_data_point(10,0.5*100)
-plt.add_data_point(11,0.5*121)
-plt.add_data_point(12,0.5*144)
+plot_name_map.set("stopping_criteria", figure.plot_areas.get("stopping_criteria"))
 
 /*
-let figure_display = new SvgDisplay({
-	renderTarget: document.getElementById("progress-plots"),
-	d_scale:V.from(6,4), 
-	d_scale_units:"cm"
-})
+let plt = plot_name_map.get("stopping_criteria")
+//plt.setCurrentDataset("test_1_dataset")
+plt.addDataToDataset("test_1_dataset", 0,0)
+plt.addDataToDataset("test_1_dataset", 1,1)
+plt.addDataToDataset("test_1_dataset", 2,4)
+//plt.addDataToDataset("test_1_dataset", 3,9)
+//plt.addDataToDataset("test_1_dataset", 4,16)
+//plt.addDataToDataset("test_1_dataset", 5,25)
+//plt.addDataToDataset("test_1_dataset", 6,36)
+//plt.addDataToDataset("test_1_dataset", 7,49)
+//plt.addDataToDataset("test_1_dataset", 8,64)
+plt.addDataToDataset("test_1_dataset", 9,80)
+plt.addDataToDataset("test_1_dataset", 10,100)
+plt.addDataToDataset("test_1_dataset", 11,121)
+plt.addDataToDataset("test_1_dataset", 12,144)
 
-//figure_display.addFigure("fabs_record", new Figure({f_rect_in_d : new R(0,1,1,-1)}))
-//figure_display.addFigureWithAspectRatio("fabs_record")
-figure_display.addFigureOnGrid("fabs_record")
-
-figure_display.figures.get("fabs_record").addPlotArea("pa_1", new PlotArea({p_rect_in_f : new R(0.1,0.1,0.8,0.8)}))
-
-figure_display.figures.get("fabs_record").plot_areas.get("pa_1").addDataArea("da_1", new DataArea())
-
-figure_display.render()
-figure_display.renderer.renderToTarget()
+//plt.setCurrentDataset("test_2_dataset")
+plt.addDataToDataset("test_2_dataset", 0,0.5*0)
+plt.addDataToDataset("test_2_dataset", 1,0.5*1)
+plt.addDataToDataset("test_2_dataset", 2,0.5*4)
+plt.addDataToDataset("test_2_dataset", 3,0.5*9)
+plt.addDataToDataset("test_2_dataset", 4,0.5*16)
+plt.addDataToDataset("test_2_dataset", 5,0.5*25)
+plt.addDataToDataset("test_2_dataset", 6,0.5*36)
+plt.addDataToDataset("test_2_dataset", 7,0.5*49)
+plt.addDataToDataset("test_2_dataset", 8,0.5*64)
+plt.addDataToDataset("test_2_dataset", 9,0.5*80)
+plt.addDataToDataset("test_2_dataset", 10,0.5*100)
+plt.addDataToDataset("test_2_dataset", 11,0.5*121)
+plt.addDataToDataset("test_2_dataset", 12,0.5*144)
 */
+
 download_clean_map_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 
@@ -157,41 +138,6 @@ download_residual_button.addEventListener(
 		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
 	)
 )
-
-
-/*
-plot_name_map.set(
-	"fabs_record", 
-	new LogLinePlot({
-		label: "fabs_record", 
-		ax_labels: ['iteration', 'absolute brightest pixel fraction'],
-		ax_extent: E.from(0,1,0,1),//E.from(0,5,0,1),
-		svg_fig: svg_figure
-	})
-)
-
-plot_name_map.set(
-	"rms_record", 
-	new LogLinePlot({
-		label: "rms_record", 
-		ax_labels: ['iteration', 'residual rms'],
-		ax_extent: E.from(0,1,0,1),//E.from(0,5,0,1),
-		svg_fig: svg_figure,
-		p_rect_in_f: new R(1,0,1,1),
-	})
-)
-
-plot_name_map.set(
-	"threshold_record", 
-	new LogLinePlot({
-		label: "threshold_record", 
-		ax_labels: ['iteration', 'threshold value'],
-		ax_extent: E.from(0,1,0,1),//E.from(0,5,0,1),
-		svg_fig: svg_figure,
-		p_rect_in_f: new R(0,1,1,1),
-	})
-)
-*/
 
 run_deconv_button.addEventListener("click", async (e)=>{
 		if ((sci_image_holder.name === null) || (psf_image_holder.name === null)) {
