@@ -115,6 +115,11 @@ class Dataset{
 		this.storage.push(data)
 	}
 	
+	resetIterator(axes_name){
+		//console.log("Dataset::resetIterator", axes_name)
+		this.read_heads.set(axes_name,0)
+	}
+	
 	*getNewData(axes_name){
 		let current_index = this.read_heads.get(axes_name)
 		if (current_index === undefined){
@@ -699,6 +704,8 @@ class AxesSet{
 		assert(this.ndim == dimensions_updated.length, "Cannot change number of dimensions of AxesSet after creation")
 		let perform_redraw = (V.accumulate_sum(dimensions_updated) > 0)
 
+		//console.log("AxesSet::updateWhenExtentChanged", perform_redraw)
+
 		if (perform_redraw){
 			this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
 			assert(!T.is_rank_deficient(this.fromData_transform), "this.fromData_transform must be of full rank")
@@ -718,6 +725,7 @@ class AxesSet{
 			if (this.data_area !== null){
 				for(const dataset_name of this.registered_datasets){
 					this.data_area.setDatasetTransform(dataset_name, this.fromData_transform)
+					this.data_area.clearData(dataset_name)
 				}
 			}
 		}
@@ -747,7 +755,7 @@ class AxesSet{
 		// Update component axes if required, and draw dataset on the associated "data_area" of this axis
 		//let resize = false
 		let resize = V.of_size(this.ndim, Uint8Array) // uninitialised : {1,5,3,6,...} 
-		
+		let redraw_flag = false
 		for(const data of dataset.getNewData(this.name)){
 			resize = V.scalar_prod_inplace(resize, 0) // {0,0,0,...}
 			for(const [i,ar_flag] of this.autoresize.entries()){
@@ -771,10 +779,14 @@ class AxesSet{
 				}
 			}
 			
-			this.updateWhenExtentChanged(resize)
+			redraw_flag = redraw_flag || this.updateWhenExtentChanged(resize)
 		
-			this.data_area.drawData(dataset.name, data)
+			if(!redraw_flag){
+				this.data_area.drawData(dataset.name, data)
+			}
+			
 		}
+		return redraw_flag
 	}
 	
 	attachDataArea(data_area){
@@ -885,24 +897,28 @@ class DataArea{
 		this.dataset_indices = new Map() // map of dataset name to dataset index
 		this.dataset_transforms = new Map() // transform from data coords to DataArea coords
 		
-		this.dataset_artists = new Map() // artist for each dataset
+		this.dataset_plot_type_artists = new Map() // artist for each dataset
 		this.dataset_svg_holders = new Map() // SVG holders for drawings of datasets
 
 		
 	}
 	
-	setDatasetArtist(dataset_name, plot_type_artist){
+	setDatasetPlotTypeArtist(dataset_name, plot_type_artist){
 		assert_not_null(dataset_name)
 		assert_not_null(plot_type_artist)
-		this.dataset_artists.set(dataset_name, plot_type_artist)
+		this.dataset_plot_type_artists.set(dataset_name, plot_type_artist)
 		plot_type_artist.addSvgTo(this.getDatasetHolder(dataset_name).root)
 	}
 	
-	getDatasetArtist(dataset_name){
-		let da = this.dataset_artists.get(dataset_name)
+	getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist = null){
+		let da = this.dataset_plot_type_artists.get(dataset_name)
 		if(da === undefined){
-			da = new LinePlotArtist()
-			this.setDatasetArtist(dataset_name, da)
+			this.setDatasetPlotTypeArtist(
+				dataset_name, 
+				(default_plot_type_artist === null) ? new LinePlotArtist() : default_plot_type_artist
+			)
+			da = this.dataset_plot_type_artists.get(dataset_name)
+			assert_not_null(da)
 		}
 		return da
 	}
@@ -917,7 +933,7 @@ class DataArea{
 	}
 	
 	setDatasetTransform(dataset_name, fromData_transform){
-		console.log("fromData_transform", fromData_transform)
+		//console.log("fromData_transform", fromData_transform)
 		this.dataset_transforms.set(
 			dataset_name, 
 			T.prod(
@@ -965,20 +981,20 @@ class DataArea{
 	registerDataset(dataset_name, fromData_transform){
 		this.setDatasetTransform(dataset_name, fromData_transform)
 		this.getDatasetIndex(dataset_name)
-		this.getDatasetArtist(dataset_name)
+		this.getDatasetPlotTypeArtist(dataset_name)
 		this.getDatasetHolder(dataset_name)
 	}
 	
 	deregisterDataset(dataset_name){
 		this.dataset_transforms.delete(dataset_name)
 		this.dataset_indices.delete(dataset_name)
-		this.dataset_artists.delete(dataset_name)
+		this.dataset_plot_type_artists.delete(dataset_name)
 		this.dataset_svg_holders.delete(dataset_name)
 	}
 	
 	
 	clearData(dataset_name){
-		let da = this.getDatasetArtist(dataset_name)
+		let da = this.getDatasetPlotTypeArtist(dataset_name)
 		if (da !== undefined){
 			da.clear()
 		}
@@ -988,17 +1004,17 @@ class DataArea{
 		this.clearData(dataset_name)
 		let ddd = this.getDatasetDrawnData(dataset_name)
 		for(const data of ddd){
-			this.drawData(dataset_name, data, false)
+			this.drawData(dataset_name, data, null, false)
 		}
 	}
 	
-	drawData(dataset_name, data, record_data = true){
+	drawData(dataset_name, data, default_plot_type_artist = null, record_data = true){
 		//console.log("DataArea::drawData", dataset_name, data, record_data)
 		
 		if(record_data) {
 			this.getDatasetDrawnData(dataset_name).push(data)
 		}
-		this.getDatasetArtist(dataset_name).drawData(T.apply(this.getDatasetTransform(dataset_name), data))
+		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(T.apply(this.getDatasetTransform(dataset_name), data))
 		
 	}
 	
@@ -1078,13 +1094,35 @@ class PlotArea{
 	}
 	
 	appendToDataset(data, dataset_name = null){
+		let axes = null
+		let dataset = null
+		let needs_redraw = false
+		
 		if(dataset_name === null){
 			dataset_name = this.current_dataset
 		}
 		this.datasets.get(dataset_name).push(data)
+		
+		
+		
 		// send a message to axes for dataset telling it to draw the new point
 		for(const axes_name of this.axes_for_dataset.get(dataset_name)){
-			this.axes.get(axes_name).drawDataset(this.datasets.get(dataset_name))
+			// if axes.drawDataset(...) returns true, we need to redra
+			axes = this.axes.get(axes_name)
+			dataset = this.datasets.get(dataset_name)
+			needs_redraw = axes.drawDataset(dataset)
+			
+			//console.log("PlotArea::appendToDataset ", dataset_name, needs_redraw)
+			
+			if(needs_redraw){
+				for(const redraw_dataset_name of axes.registered_datasets){
+					//console.log("PlotArea::appendToDataset ", redraw_dataset_name)
+					dataset = this.datasets.get(redraw_dataset_name)
+					dataset.resetIterator(axes.name)
+					axes.drawDataset(dataset)
+				}
+			}
+			
 		}
 	}
 	
