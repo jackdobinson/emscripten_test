@@ -64,7 +64,7 @@ EM_JS(void, update_js_plot, (const char* name, void* ptr, int size), {
 
 EM_JS(void, js_plot_point, (const char* name, double x, double y), {
 	name = UTF8ToString(name);
-	console.log("EM_JS: js_plot_point");
+	console.log("EM_JS: js_plot_point", x, y);
 	if(plot_name_map === undefined){
 		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
 		return;

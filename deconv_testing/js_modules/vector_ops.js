@@ -5,6 +5,15 @@ class V{
 	static zero = Float64Array.from([0,0])
 	static one =  Float64Array.from([1,1])
 	
+	static any_nan(v){
+		for(const item of v){
+			if (isNaN(item)){
+				return true
+			}
+		}
+		return false
+	}
+	
 	static zeros(n=2,type=Float64Array){
 		return V.const_of_size(n, 0, type)
 	}
@@ -260,6 +269,13 @@ class V{
 			r[i] = v1[i] * s
 		}
 		return r
+	}
+	
+	static scalar_prod_inplace(v1, s){
+		for(let i=0; i<v1.length; i++){
+			v1[i] *= s
+		}
+		return v1
 	}
 	
 	static scalar_add(v1, s){

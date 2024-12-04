@@ -4,6 +4,18 @@ class T{
 
 	static identity = Float64Array.from([1,0,0,1,0,0])
 
+	static ensure_full_rank(t){
+		// If transform is not full rank, add a very small amount to the
+		// scale elements to ensure the value is small but not completely zero
+		t[0] += ((t[0]==0) ? 100*Number.EPSILON : 0)
+		t[3] += ((t[3]==0) ? 100*Number.EPSILON : 0)
+		return t
+	}
+	
+	static is_rank_deficient(t){
+		return (t[0] == 0 || t[3] == 0)
+	}
+
 	static from_full(a11, a21, a12, a22, a31, a32){
 		const t = new Float64Array(6)
 		t[0] = a11
@@ -17,10 +29,10 @@ class T{
 	
 	static from(sx, sy, tx, ty){
 		const t = new Float64Array(6)
-		t[0] = (sx ==0) ? 100*Number.EPSILON : sx 
+		t[0] = sx //(sx ==0) ? 100*Number.EPSILON : sx 
 		t[1] = 0
 		t[2] = 0
-		t[3] = (sy == 0) ? 100*Number.EPSILON : sy
+		t[3] = sy //(sy == 0) ? 100*Number.EPSILON : sy
 		t[4] = tx
 		t[5] = ty
 		return t

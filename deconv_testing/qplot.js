@@ -98,317 +98,6 @@ character glyphs, we only want to apply transforms to where the text is placed.
 
 */
 
-// QUESTION: How to hold style information for a graph?
-
-/*
-function createSvgElement(tag, attributes={}){
-	let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
-	for (const key of Object.keys(attributes)){
-		element.setAttribute(key, attributes[key])
-	}
-	return element
-}
-
-function setAttrsFor(element, ...attr_objs){
-	for (const attrs of attr_objs){
-		for (const key of Object.keys(attrs)){
-			element.setAttribute(key, attrs[key])
-		}
-	}
-	return element
-}
-
-function formatNumber(a, sig_figs=3, round_to=1E-12){
-	if (round_to != 0){
-		let diff = (a % round_to)
-		a += (diff > round_to/2) ? diff : -diff
-	}
-	return a.toPrecision(sig_figs)
-}
-
-*/
-
-/*
-RepresentationDimensionDefaultStyles = {
-	"colour" : [
-		"red",
-		"green",
-		"blue",
-		"purple",
-		"brown",
-		"yellow",
-	],
-	"marker" : [
-		"circle",
-		"square",
-		"triangle",
-		"cross",
-		"dot",
-		"plus",
-	],
-	"line" : [
-		"solid",
-		"dashed",
-		"dotted",
-	],
-}
-
-class Transformer{
-	// Want this to be able to apply matrix and general functional transforms
-	// therefore need to chain the transforms together
-	//
-	// NOTE: If there are no transforms in the chain, should just return input unchanged (identity transform)
-	//
-	// IDEA: This should possibly be a tree, with each node on the tree being the transform for a specific
-	// coord system towards the screen coord system
-	
-	static combine(t_a2b2c, t_c2d2e){
-		// transformer 1 is applied, then transformer 2 in forward direction, reversed for backwards direction
-		return new Transformer({
-			fwd_transform_chain : ((t_a2b2c===null)? [] : t_a2b2c.fwd_transform_chain).concat((t_c2d2e===null)? [] :t_c2d2e.fwd_transform_chain),
-			bck_transform_chain : ((t_c2d2e===null)? [] : t_c2d2e.bck_transform_chain).concat((t_a2b2c===null)? [] : t_a2b2c.bck_transform_chain)
-		})
-	}
-	
-	static single(fwd_t, bck_t){
-		return new Transformer({
-			fwd_transform_chain :[fwd_t],
-			bck_transform_chain :[bck_t]
-		})
-	}
-	
-	static fromT(t){
-		return Transformer.single(
-			(...args)=>T.apply(t,args),
-			(...args)=>T.iapply(t,args)
-		)
-	}
-	
-	constructor({
-			fwd_transform_chain = [],
-			bck_transform_chain = [],
-		} = {}){
-		assert_all_defined(fwd_transform_chain, fwd_transform_chain)
-		this.fwd_transform_chain = fwd_transform_chain
-		this.bck_transform_chain = bck_transform_chain
-		
-		console.log(this.fwd_transform_chain)
-		console.log(this.bck_transform_chain)
-		
-	}
-	
-	forward(...args){
-		let i=0
-		console.log(`transform input: ${args}`)
-		for(const t of this.fwd_transform_chain){
-			args = t(...args)
-			console.log(`transform ${i} result: ${args}`)
-			i++
-		}
-		return args
-	}
-	
-	forward_scale(...args){
-		console.log(`forward_scale input ${args}`)
-		let a = V.zeros(args.length)
-		let b = V.from(...args)
-		let [at, bt] = this.block_forward(a, b)
-		console.log(`forward_scale result ${V.sub(bt, at)}`)
-		return V.sub(bt,at)
-	}
-	
-	backward(...args){
-		for(const t of this.bck_transform_chain){
-			args = t(...args)
-		}
-		return args
-	}
-	
-	backward_scale(...args){
-		let a = V.zeros(args.length)
-		let b = V.from(...args)
-		let [at, bt] = this.block_backward(a, b)
-		return V.sub(bt,at)
-	}
-	
-	block_forward(...args){
-		console.log(`block transform input ${args}`)
-		let result = []
-		for(const item of args){
-			result.push(this.forward(...item))
-		}
-		console.log(`block transform result ${result}`)
-		return result
-	}
-	
-	block_backward(...args){
-		let result=[]
-		for(const item of args){
-			result.push(this.backward(...item))
-		}
-		return result
-	}
-	
-	block_forward_scale(...args){
-		console.log(`block transform scale input ${args}`)
-		let result = []
-		for(const item of args){
-			result.push(this.forward_scale(...item))
-		}
-		console.log(`block transform scale result ${result}`)
-		return result
-	}
-	
-	block_backward_scale(...args){
-		let result=[]
-		for(const item of args){
-			result.push(this.backward_scale(...item))
-		}
-		return result
-	}
-}
-
-
-class DataSet{
-	static from(iterable, ...args){
-		let dataset = new DataSet(...args)
-		dataset.fill_from(iterable)
-		return dataset
-	}
-
-	constructor({
-			field_info = {}, // {"field_name_1":{...info...}, "field_name_2":{...info...}, ...}
-			ds2r_transform = new Transformer(),
-			n_max_entries = 1024,
-			storage_type = Float32Array,
-		}={}){
-		this.n_fields = field_info.length
-		this.field_info = field_info
-		
-		// from coords the data is in, to arbitrary "representation" coords. In the simplistic case this is the identity transform
-		this.ds2r_transform = ds2r_transform
-		
-		this.n_max_entries = n_max_entries
-		this.is_typed_array = false
-		this.size = 0 // number of valid entries. NOTE: Each entry consists of 'this.n_fields' fields. So the total number of bits of data is this.n_fields*this.size
-		
-		if (storage_type.prototype instanceof Object.getPrototypeOf(Uint8Array)){
-			this.is_typed_array = true
-			this.storage = new storage_type(this.n_fields*this.n_max_entries)
-		} 
-		else if (storage_type == Array){
-			this.storage = []
-		}else {
-			this.storage = new storage_type(this.n_max_entries)
-		}
-		
-	}
-	
-	check_size(index=0){
-		if (this.size <= index){
-			throw new Error(`Cannot set index ${index} at or beyond size ${this.size}`)
-		}
-		if (this.n_max_entries < this.size){
-			throw new Error(`Size ${this.size} is larger than max entries ${this.n_max_entries}`)
-		}
-	}
-	
-	*entries(){
-		if(this.is_typed_array){
-			for(let i=0; i<this.size; ++i){
-				yield [i, this.storage.subarray(index*this.n_fields, (index+1)*this.n_fields)]
-			}
-		} else {
-			yield* this.storage.entries()
-		}
-	}
-	
-	field(n){
-		assert(n < this.n_fields, "Must have n or more fields to request n^th one.")
-		
-		return Object.entries(this.field_info)[n]
-	}
-	
-	indexOfField(field_name){
-		idx = Object.keys(this.field_info).indexOf(field_name)
-		assert(idx != -1, "Field name must be present to get its index")
-		return idx
-	}
-	
-	*getDataByField(field_name){
-		field_index = this.indexOfField(field_name)
-		yield* this.getDataByIndex(field_index)
-	}
-	
-	*getDataByIndex(idx){
-		if (this.is_typed_array){
-			for(let i=0;i<this.size; ++i){
-				yield this.storage[i*this.n_fields + idx]
-			}
-		} else {
-			for(const datum of this.storage){
-				yield datum[idx]
-			}
-		}
-	}
-	
-	*fields(){
-		yield* Object.entries(this.field_info)
-	}
-	
-	at(index){
-		this.check_size(index)
-		if (this.is_typed_array){
-			return this.storage.subarray(index*this.n_fields, (index+1)*this.n_fields)
-		}
-		return this.storage[index]
-	}
-	
-	
-	
-	_set_typed_array(index, value){
-		if ((this.n_fields == 1) && (value.length == undefined)){
-			this.storage[index] = value
-			return
-		}
-		
-		let x = this.storage.subarray(index*this.n_fields, (index+1)*this.n_fields)
-		for(const [i,item] of value.entries()){
-			x[i] = item
-		}
-	}
-	
-	set(index, value){
-		this.check_size(index)
-		if (this.is_typed_array){
-			this._set_typed_array(index, value)
-		}
-		else {
-			this.storage[index] = value
-		}
-		return this
-	}
-	
-	push(value){
-		this.size++
-		this.check_size()
-		if(this.is_typed_array){
-			this._set_typed_array(this.size-1,value)
-		} else {
-			this.storage.push(value)
-		}
-		return this
-	}
-	
-	fill_from(iterable){
-		for(const item of iterable){
-			this.push(item)
-		}
-	}
-}
-*/
-
-
 class Dataset{
 	constructor(
 		name
@@ -446,6 +135,190 @@ class Dataset{
 		this.read_heads.set(axes_name, current_index)
 	}
 }
+
+class PlotTypeArtist{
+	// This object is responsible for creating the SVG representation of a dataset
+	// this should be subclassed for different types of plot
+	// The default implementation is a line graph
+	
+	static colour_progression = [
+		"blue",
+		"red",
+		"green",
+		"purple",
+		"brown",
+		"orange",
+	]
+	
+	static n_instances = 0
+	
+	constructor({
+		name = null,
+		
+	} = {}){
+		PlotTypeArtist.n_instances++
+	
+		this.name = (name===null) ? `plot-type-artist-${PlotTypeArtist.n_instances}` : name
+		this.needs_data_init = true
+		this.default_primary_colour = PlotTypeArtist.colour_progression[(PlotTypeArtist.n_instances % PlotTypeArtist.colour_progression.length)]
+		
+		this.svg = new SvgContainer(
+			Svg.group(`group-${this.name}`, null, {})
+		)
+		this.data_svg = new SvgContainer(
+			this.svg.add('group',`group-data-${this.name}`, null, {})
+		)
+	}
+	
+	clear(){
+		this.data_svg.clear()
+		this.needs_data_init = true
+	}
+	
+	addSvgTo(parent){
+		parent.appendChild(this.svg.root)
+	}
+	
+	drawData(data){
+		console.log("PlotTypeArtist::drawData is abstract method")
+	}
+	
+	drawDataIterable(data_iterable){
+		for(const item of data_iterable){
+			this.drawData(item)
+		}
+	}
+	
+}
+
+
+class LinePlotArtist extends PlotTypeArtist {
+
+	static marker_style_defaults = {
+		"stroke" : "none",//"context-stroke", // "none"
+		"fill" : null,//"context-fill", //colour,
+		"stroke-width" : 0.2,
+		"stroke-opacity" : 1,
+	}
+	
+	static line_style_defaults = {
+		"marker-start" : null,
+		"marker-mid" : null,
+		"marker-end" : null,
+		"stroke" : null,
+		"stroke-width" : 0.3,
+		"fill" : "none",
+	}
+
+	constructor({
+		name = null,
+		marker_type = "circle",
+		marker_style = {},
+		line_style = {},
+	}={}){
+		super({name:name})
+	
+		this.marker_type = marker_type
+		this.default_marker_name = `marker-${this.name}`
+		this.create_default_marker = false
+		
+		this.setMarkerStyle(marker_style)
+		this.setLineStyle(line_style)
+	
+	
+		this.defs = new SvgContainer(this.svg.add("defs"))
+		
+		
+		if(this.create_default_marker){
+			this.createMarker()
+		}
+		
+		this.createLine()
+	}
+	
+	createLine(){
+		this.needs_data_init = false
+		this.line = this.data_svg.add(
+			"polyline",
+			"",
+			this.line_style
+		)
+	}
+	
+	setMarkerStyle(marker_style={}){
+		this.marker_style = O.insertIfNotPresent(marker_style, LinePlotArtist.marker_style_defaults)
+		if (this.marker_style["fill"] === null){
+			this.marker_style["fill"] = this.default_primary_colour
+		}
+	}
+	
+	setLineStyle(line_style={}){
+		this.line_style = O.insertIfNotPresent(line_style, LinePlotArtist.line_style_defaults)
+		if (this.line_style["stroke"] === null){
+			this.line_style["stroke"] = this.default_primary_colour
+		}
+		if (this.line_style["marker-start"] === null){
+			this.line_style["marker-start"] = `url(#${this.default_marker_name})`
+			this.create_default_marker = true
+		}
+		if (this.line_style["marker-mid"] === null){
+			this.line_style["marker-mid"] = `url(#${this.default_marker_name})`
+			this.create_default_marker = true
+		}
+		if (this.line_style["marker-end"] === null){
+			this.line_style["marker-end"] = `url(#${this.default_marker_name})`
+			this.create_default_marker = true
+		}
+	}
+	
+	createMarker(){
+		this.default_marker = new SvgContainer(
+			this.defs.add(
+				"marker", 
+				{
+					id : this.default_marker_name,
+					viewBox : "0 0 3 3",
+					markerWidth : 5,
+					markerHeight: 5,
+					markerUnits : "strokeWidth",
+					orient : 0, //"auto",//"auto-start-reverse",
+					refX : 1.5,
+					refY: 1.5,
+				}
+			)
+		)
+		
+		switch (this.marker_type) {
+			case "circle":
+				this.default_marker.add(
+					"circle", 
+					V.scalar_prod(V.ones(2), 1.5),
+					1,
+					this.marker_style
+				)
+				break
+			default:
+				throw Error(`Unknown marker type "${this.marker_type}" requested`)
+		}
+	}
+	
+	drawData(data){
+		// May have to swap this for a DOMPoint at some time in the future
+		if (this.needs_data_init){
+			this.createLine()
+		}
+		
+		//console.log(this.line)
+		
+		let p = this.line.ownerSVGElement.createSVGPoint()
+		//console.log(data[0], data[1])
+		//console.log(typeof(data[0]), typeof(data[1]))
+		p.x = data[0]
+		p.y = data[1]
+		this.line.points.appendItem(p)
+	}
+}
+
 
 class ReferenceFrame{
 	
@@ -552,7 +425,7 @@ class Axis{
 		this.tick_label_anchor_pos = null
 		
 		
-		
+		this.do_redraw_set = new Set() // to be filled with functions that redraw things when a redraw is required
 		
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
 		
@@ -567,25 +440,46 @@ class Axis{
 		parent.appendChild(this.svg.root)
 	}
 	
-	updateRootTransform(transform){
-		this.toRoot_transform = transform
-		this.calc()
-		this.draw()
+	updateContainingRect(rect){
+		this.containing_rect = rect
+		this.calcLine()
+		
+		this.redraw()
 	}
 	
-	calc(rect){
-		this.calcLine(rect)
-		this.calcLabel()
-		this.calcTicks()
-		this.calcTickLabelPositions()
-		this.calcTickLabels()
+	updateRootTransform(transform){
+		this.toRoot_transform = transform
+		
+		this.draw() // everything needs to be redrawn if toRoot transform changes
+	}
+	
+	updateFromDataTransform(transform){
+		this.fromData_transform = transform
+		
+		this.calcTickLabels() // only the labels are updated if the fromData transform changes
+		this.redraw()
+	}
+	
+	redraw(){
+		for(const redraw_callable of this.do_redraw_set){
+			redraw_callable()
+		}
+		this.do_redraw_set.clear()
+	}
+	
+	calc(){
+		this.calcLine() // calcLine triggers the others to be calculated too
 	}
 	
 	draw(){
+		// Draw everything manually here
 		this.drawLine()
 		this.drawLabel()
 		this.drawTicks()
 		this.drawTickLabels()
+		
+		// as we have just drawn everything, remove everything from redraw_set
+		this.do_redraw_set.clear()
 	}
 	
 	calcLine(){
@@ -602,6 +496,11 @@ class Axis{
 			...V.add(start, b)
 		)
 		//console.log("this.path", this.path)
+		this.do_redraw_set.add(this.drawLine.bind(this))
+		
+		// need to recalculate these as they depend on the line
+		this.calcLabel()
+		this.calcTicks()
 	}
 	
 	drawLine(attrs={"stroke":"black"}){
@@ -624,6 +523,7 @@ class Axis{
 			),
 			delta
 		)
+		this.do_redraw_set.add(this.drawLabel.bind(this))
 	}
 	
 	drawLabel(){
@@ -655,7 +555,11 @@ class Axis{
 				V.from(...starts.subarray(i*this.ndim, (i+1)*this.ndim), ...ends.subarray(i*this.ndim, (i+1)*this.ndim))
 			)
 		}
+		this.do_redraw_set.add(this.drawTicks.bind(this))
 		
+		// Need to recalculate these as they depend on the ticks
+		this.calcTickLabelPositions()
+		this.calcTickLabels()
 	}
 	
 	drawTicks(
@@ -696,6 +600,7 @@ class Axis{
 				)
 			)
 		}
+		this.do_redraw_set.add(this.drawTickLabels.bind(this))
 	}
 	
 	calcTickLabels(){
@@ -708,11 +613,14 @@ class Axis{
 				)
 			)
 		}
+		this.do_redraw_set.add(this.drawTickLabels.bind(this))
 	}
 	
 	drawTickLabels(){
+		this.tick_label_set_svg_holder.clear() // remove previous tick labels
+		
 		for(let i=0; i<this.tick_label_set.length; i++){
-			this.tick_set_svg_holder.add(
+			this.tick_label_set_svg_holder.add(
 				"text",
 				T.apply(this.toRoot_transform, this.tick_label_pos_set[i]),
 				this.tick_label_set[i],
@@ -782,11 +690,43 @@ class AxesSet{
 				this.data_area.setDatasetTransform(dataset_name, this.fromData_transform)
 			}
 		}
+	}
+	
+	
+	updateWhenExtentChanged(
+			dimensions_updated, // a list of dimensions that have changed from previous value
+		){ // -> bool : true if we needed to perform a redraw, false otherwise
+		assert(this.ndim == dimensions_updated.length, "Cannot change number of dimensions of AxesSet after creation")
+		let perform_redraw = (V.accumulate_sum(dimensions_updated) > 0)
+
+		if (perform_redraw){
+			this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
+			assert(!T.is_rank_deficient(this.fromData_transform), "this.fromData_transform must be of full rank")
+			assert(!V.any_nan(this.fromData_transform), "this.fromData_transform not have any NaN entries")
+			//console.log("New transform: ", this.fromData_transform)
+			
+			for( const[i, dim_updated_flag] of dimensions_updated.entries()){
+				if(dim_updated_flag != 0){
+					this.axis_list[i].updateFromDataTransform(this.fromData_transform)
+				}
+				else {
+					// No need to bother with redraws if updated transform will not affect this axis
+					this.axis_list[i].fromData_transform = this.fromData_transform
+				}
+			}
+			
+			if (this.data_area !== null){
+				for(const dataset_name of this.registered_datasets){
+					this.data_area.setDatasetTransform(dataset_name, this.fromData_transform)
+				}
+			}
+		}
 		
-		
+		return perform_redraw
 	}
 	
 	registerDataset(dataset_name){
+		// Add a new dataset that this axes is responsible for representing
 		let idx = this.registered_datasets.indexOf(dataset_name)
 		if(idx < 0){
 			this.registered_datasets.push(dataset_name)
@@ -795,6 +735,7 @@ class AxesSet{
 	}
 	
 	deregisterDataset(dataset_name){
+		// Remove a dataset that is axes is responsible for representing
 		let idx = this.registered_datasets.indexOf(dataset_name)
 		if(idx < 0){
 			this.registered_datasets.splice(idx,1)
@@ -803,23 +744,34 @@ class AxesSet{
 	}
 	
 	drawDataset(dataset){
-		let resize = false
+		// Update component axes if required, and draw dataset on the associated "data_area" of this axis
+		//let resize = false
+		let resize = V.of_size(this.ndim, Uint8Array) // uninitialised : {1,5,3,6,...} 
+		
 		for(const data of dataset.getNewData(this.name)){
-			resize = false
+			resize = V.scalar_prod_inplace(resize, 0) // {0,0,0,...}
 			for(const [i,ar_flag] of this.autoresize.entries()){
-				if(ar_flag && !(this.extent_in_data_coords[i*2] <= data[i])){
-					resize = true
-					this.extent_in_data_coords[i*2] = data[i]
-				}
-				if(ar_flag && !(data[i] <= this.extent_in_data_coords[i*2 + 1])){
-					resize = true
-					this.extent_in_data_coords[i*2+1] = data[i]
+				if(ar_flag){
+					if(!(this.extent_in_data_coords[i*2] <= data[i])){
+						resize[i] = 1
+						this.extent_in_data_coords[i*2] = data[i]
+					}
+					if(!(data[i] <= this.extent_in_data_coords[i*2 + 1])){
+						resize[i] = 1
+						this.extent_in_data_coords[i*2+1] = data[i]
+					}
+					
+					// if our extent has no size, alter it slightly so it is bigger
+					// this avoids problems with transforms later
+					if (resize[i]==1 &&(this.extent_in_data_coords[i*2] == this.extent_in_data_coords[i*2+1])){
+						//console.log("Trying to prevent rank deficient transform")
+						this.extent_in_data_coords[i*2] -= 50*Number.EPSILON
+						this.extent_in_data_coords[i*2+1] += 50*Number.EPSILON
+					}
 				}
 			}
 			
-			if (resize){
-				this.setExtent(this.extent_in_data_coords)
-			}
+			this.updateWhenExtentChanged(resize)
 		
 			this.data_area.drawData(dataset.name, data)
 		}
@@ -844,21 +796,25 @@ class AxesSet{
 		}
 	}
 	
+	getDefaultContainingRect(ax_idx){
+		let v_el = V.unit(ax_idx, this.data_area.dimensions.spatial)
+		let v_not_el = V.sub(V.ones(this.data_area.dimensions.spatial), v_el)
+		let a = 0.1
+		return new R(
+			...V.scalar_prod(
+				v_not_el,
+				-a
+			),
+			...V.add(
+				v_el,
+				V.scalar_prod(v_not_el, a)
+			)
+		)
+	}
+	
 	createAxis(name=null, containing_rect = null){
 		if(containing_rect===null){
-			let v_el = V.unit(this.axis_list.length, this.data_area.dimensions.spatial)
-			let v_not_el = V.sub(V.ones(this.data_area.dimensions.spatial), v_el)
-			let a = 0.1
-			containing_rect = new R(
-				...V.scalar_prod(
-					v_not_el,
-					-a
-				),
-				...V.add(
-					v_el,
-					V.scalar_prod(v_not_el, a)
-				)
-			)
+			containing_rect = this.getDefaultContainingRect(this.axis_list.length)
 		}
 		console.log("containing_rect", containing_rect)
 		this.axis_list.push(new Axis({
@@ -871,21 +827,29 @@ class AxesSet{
 		}))
 	}
 	
+	checkAxIdx(ax_idx){
+		assert_not_null(ax_idx, "Index of axis to update must be a positive non-zero number less than the number of dimensions of the AxesSet")
+		assert(Number.isInteger(ax_idx) && (ax_idx < this.ndim), "Index of axis to update must be a positive non-zero number less than the number of dimensions of the AxesSet")
+	}
+	
+	updateAxisContainingRect(ax_idx, containing_rect = null){
+		this.checkAxIdx(ax_idx)
+		if (containing_rect !== null){
+			this.axis_list[ax_idx].updateContainingRect(containing_rect)
+		}
+	}
+	
 	addSvgTo(parent){
 		parent.appendChild(this.svg.root)
 	}
 	
 	
-	draw(
-			rect= new R(0,0,1,1), // rectangle around which to draw axes (in "dataArea" coords)
-		){
+	draw(){
 		this.svg.clear()
 		for(const axis of this.axis_list){
 			axis.addSvgTo(this.svg.root)
-			axis.calc(rect)
-			axis.draw(
-				this.data_area.frame.toRoot_transform, // transform to go from "dataArea" (unit) coords to "root" (screen) coords
-			)
+			axis.calc()
+			axis.draw()
 		}
 	}
 }
@@ -920,22 +884,27 @@ class DataArea{
 		this.dataset_drawn_data = new Map() // map of dataset with drawn values (original values, not transformed)
 		this.dataset_indices = new Map() // map of dataset name to dataset index
 		this.dataset_transforms = new Map() // transform from data coords to DataArea coords
-		this.dataset_styles = new Map() // styles associated with each datset that is drawn to this DataArea
-		this.dataset_markers = new Map() // markers for each dataset 
+		
+		this.dataset_artists = new Map() // artist for each dataset
 		this.dataset_svg_holders = new Map() // SVG holders for drawings of datasets
-		this.dataset_svg = new Map() // references all SVG for a dataset
+
 		
-		this.line_width = 0.3
-		this.marker_size = 5
-		this.colour_progression = [
-			"blue",
-			"red",
-			"green",
-			"purple",
-			"brown",
-			"orange",
-		]
-		
+	}
+	
+	setDatasetArtist(dataset_name, plot_type_artist){
+		assert_not_null(dataset_name)
+		assert_not_null(plot_type_artist)
+		this.dataset_artists.set(dataset_name, plot_type_artist)
+		plot_type_artist.addSvgTo(this.getDatasetHolder(dataset_name).root)
+	}
+	
+	getDatasetArtist(dataset_name){
+		let da = this.dataset_artists.get(dataset_name)
+		if(da === undefined){
+			da = new LinePlotArtist()
+			this.setDatasetArtist(dataset_name, da)
+		}
+		return da
 	}
 	
 	getDatasetDrawnData(dataset_name){
@@ -945,44 +914,6 @@ class DataArea{
 			this.dataset_drawn_data.set(dataset_name,ddd)
 		}
 		return ddd
-	}
-	
-	newDatasetMarker(dataset_name){
-		// override to customise marker generation
-		let dm = new SvgContainer(
-				this.defs.add(
-				"marker", 
-				{
-					id : `marker-${dataset_name}`,
-					viewBox : "0 0 3 3",
-					markerWidth : this.marker_size,
-					markerHeight: this.marker_size,
-					markerUnits : "strokeWidth",
-					orient : 0, //"auto",//"auto-start-reverse",
-					refX : 1.5,
-					refY: 1.5,
-					//preserveAspectRatio : "xMidyMid meet"
-				}
-			)
-		)
-			
-		dm.add(
-			"circle", 
-			V.scalar_prod(V.ones(this.dimensions.spatial), 1.5),
-			1,
-			this.getDatasetStyle(dataset_name).marker_style
-		)
-		
-		return dm
-	}
-	
-	getDatasetMarker(dataset_name){
-		let dm = this.dataset_markers.get(dataset_name)
-		if(dm === undefined){
-			dm = this.newDatasetMarker(dataset_name)
-			this.dataset_markers.set(dataset_name, dm)
-		}
-		return dm
 	}
 	
 	setDatasetTransform(dataset_name, fromData_transform){
@@ -1022,39 +953,6 @@ class DataArea{
 		return dataset_svg_holder
 	}
 	
-	newDatasetStyle(dataset_name){
-		// This should be altered to have different style progression when adding new datasets
-		let colour = this.colour_progression[this.getDatasetIndex(dataset_name) % this.colour_progression.length]
-		let style_info = {
-			polyline_style : {
-				"marker-start" : `url(#marker-${dataset_name})`,
-				"marker-mid" : `url(#marker-${dataset_name})`,
-				"marker-end" : `url(#marker-${dataset_name})`,
-				"stroke" : colour,
-				"stroke-width" : this.line_width,
-				"fill" : "none",
-			},
-			marker_style : {
-				"stroke" : "none",//"context-stroke", // "none"
-				//"stroke" : colour,
-				"fill" : colour,//"context-fill", //colour,
-				//"fill" : "none",
-				"stroke-width" : 0.2,
-				"stroke-opacity" : 1,
-			},
-		}
-		return style_info
-	}
-	
-	getDatasetStyle(dataset_name){
-		let ds = this.dataset_styles.get(dataset_name)
-		if (ds === undefined){
-			ds = this.newDatasetStyle(dataset_name)
-			this.dataset_styles.set(dataset_name, ds)
-		}
-		return ds
-	}
-	
 	getDatasetIndex(dataset_name){
 		let di = this.dataset_indices.get(dataset_name)
 		if (di === undefined){
@@ -1067,24 +965,22 @@ class DataArea{
 	registerDataset(dataset_name, fromData_transform){
 		this.setDatasetTransform(dataset_name, fromData_transform)
 		this.getDatasetIndex(dataset_name)
-		this.getDatasetStyle(dataset_name)
+		this.getDatasetArtist(dataset_name)
 		this.getDatasetHolder(dataset_name)
-		this.getDatasetMarker(dataset_name)
 	}
 	
 	deregisterDataset(dataset_name){
 		this.dataset_transforms.delete(dataset_name)
 		this.dataset_indices.delete(dataset_name)
-		this.dataset_styles.delete(dataset_name)
+		this.dataset_artists.delete(dataset_name)
 		this.dataset_svg_holders.delete(dataset_name)
-		this.dataset_markers.delete(dataset_name)
 	}
 	
 	
 	clearData(dataset_name){
-		let dsh = this.getDatasetHolder(dataset_name)
-		if (dsh !== undefined){
-			dsh.clear()
+		let da = this.getDatasetArtist(dataset_name)
+		if (da !== undefined){
+			da.clear()
 		}
 	}
 	
@@ -1097,39 +993,12 @@ class DataArea{
 	}
 	
 	drawData(dataset_name, data, record_data = true){
-		// Draws a single data point
-		// This should be altered to draw different types of graph
-		// default is a line plot	
-			
-		let dataset_style = this.getDatasetStyle(dataset_name)
-		let dataset_svg_holder = this.getDatasetHolder(dataset_name)
+		//console.log("DataArea::drawData", dataset_name, data, record_data)
 		
 		if(record_data) {
 			this.getDatasetDrawnData(dataset_name).push(data)
 		}
-		data = T.apply(this.getDatasetTransform(dataset_name),data)
-
-		if (dataset_svg_holder.root.children.length == 0){
-			//console.log("New polyline")
-			dataset_svg_holder.add(
-				"polyline",
-				data.toString(),
-				dataset_style.polyline_style
-			)
-		} 
-		else {
-			
-			let el = dataset_svg_holder.root.firstChild
-			
-			// May have to swap this for a DOMPoint at some time in the future
-			let p = el.ownerSVGElement.createSVGPoint()
-			p.x = data[0]
-			p.y = data[1]
-			el.points.appendItem(p)
-			
-			//el.setAttribute("points",  el.points.toString() + (" "+d.toString()))
-		}
-		
+		this.getDatasetArtist(dataset_name).drawData(T.apply(this.getDatasetTransform(dataset_name), data))
 		
 	}
 	
@@ -1180,7 +1049,20 @@ class PlotArea{
 		
 	}
 	
+	setCurrentAxes(axes_name){
+		// Sets axes `axes_name` as the "current axes" i.e. the default unless a different axes is specified
+		assert_not_null(axes_name)
+		this.current_axes = axes_name
+	}
+	
+	setCurrentDataset(dataset_name){
+		// Sets dataset `dataset_name` as the "current_dataset" i.e. the default if a different dataset is not specified
+		assert_not_null(dataset_name)
+		this.current_dataset = dataset_name
+	}
+	
 	setAsDataset(data, dataset_name = null){
+		// Sets dataset `dataset_name` to only contain `data`
 		if(dataset_name === null){
 			dataset_name = this.current_dataset
 		}
@@ -1247,8 +1129,6 @@ class PlotArea{
 		this.addDatasetToAxes(axes_name, ds)
 		return ds.name
 	}
-	
-	
 	
 	appendDataArea(name, data_area){
 		this.data_areas.set(name, data_area)
@@ -1356,1106 +1236,3 @@ class Figure{
 	
 }
 
-
-
-/*
-
-class Representation{
-	// This class is responsible for transforming dataset values to the data area coords
-	static fromExtent(extent){
-		return new Representation({
-			r2da_transform : Transformer.fromT(T.invert(E.getTransformFromUnitCoordsTo(extent))),
-		})
-	}
-
-	constructor({
-		r2da_transform = new Transformer(),
-		dimension_names = [
-			"x",
-			"y",
-			"size",
-			"colour",
-			"marker",
-			"line",
-		],
-	}={}){
-		// Transform from arbitrary "representation coords" to dataArea coords which run from (0,1) in each dimension
-		this.r2da_transform = r2da_transform
-		this.dimension_names = dimension_names
-		
-		
-		this.datasets = new Map()
-		//this.dataset_field_to_dimension_associations = new Map()
-		this.dimension_to_dataset_field_associations = new Map()
-		this.dataset_field_pos_indices = new Map()
-		
-		
-		
-	}
-	
-	associateDatasetFieldWithDimension(dataset_name, field_name, dimension_name){
-		let current_associations = this.dataset_field_to_dimension_associations.get(dataset_name)
-		let new_associations = {field_name : field_name, field_idx : this.datasets.get(dataset_name).indexOfField(field_name)}
-		if(current_associations === undefined){
-			current_associations = {dimension_name : new_associations}
-		} else {
-			current_associations[dimension_name] = new_associations
-		}
-		this.dataset_field_to_dimension_associations.set(dataset_name, current_associations)
-	}
-	
-	getFieldIndexOfDimension(dataset_name, dimension_name){
-		let d2f_assoc = this.dimension_to_dataset_field_associations.get(dataset_name)
-		if(d2f_assoc === undefined){
-			return this.dimension_names.indexOf(dimension_name)
-		}
-		
-		let f_assoc = d2f_assoc[dimension_name]
-		assert(f_assoc === undefined, "If we have an association between dimensions and field names, must be able to find passed dimension name")
-		
-		return f_assoc.field_idx
-	}
-
-	
-	getDatasetIdx(name){
-		return this.datasets.keys().indexOf(name)
-	}
-	
-	addDataset(name, dataset){
-		this.datasets.set(name, dataset)
-		let first_two_fields = [dataset.field(0).name, dataset.field(1).name]
-		for(const [i, field_name] of first_two_fields.entries()){
-			this.associateDatasetFieldWithDimension(name, field_name, dimension_names[i])
-		}
-	}
-	
-	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
-		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
-	}
-	
-	setDatasetPosFieldIndices(dataset_name){
-		this.dataset_field_pos_indices.set(dataset_name, [this.getFieldIndexOfDimension(dataset_name, "x"), this.getFieldIndexOfDimension(dataset_name,"y")])
-	}
-	
-	getPosFromData(dataset_name, data){
-		let pos_idxs = this.dataset_field_pos_indices.get(dataset_name)
-		return V.select_by_idxs(data, pos_idxs)
-	}
-	
-	render(renderer, transform){
-		let r2s_transform = Transformer.combine(this.r2da_transform, transform)
-		
-		// datasets
-		for (const [name, dataset] of this.datasets.entries()){
-			if(!renderer.hasGroup(name)){
-				renderer.addGroup(name)
-			}
-			for(const data of dataset.entries()){
-				renderer.draw
-			}
-		}
-	}
-}
-
-
-
-
-class DataArea{
-	constructor({
-		da_rect_in_p = new R(0.1,0.1,0.8,0.8)
-	}={}){
-		this.da_rect_in_p = da_rect_in_p
-		this.da2p_transform = null
-		this.updateTransform()
-		
-		this.representations = new Map()
-		
-	}
-	
-	addRepresentation(name, representation){
-		this.representations.set(name, representation)
-	}
-	
-	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
-		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
-	}
-	
-	render(renderer, transform){
-		let da2s_transform = Transformer.combine(this.da2p_transform, transform)
-	
-		// Debug box
-		this.draw(renderer, transform, "rect", [this.da_rect_in_p.r], [this.da_rect_in_p.s], [], {
-			"stroke":"yellow",
-			"stroke-width":"0.1",
-		})
-		
-		// representations
-		for(const [name, representation] of this.representations.entries()){
-			representation.render(
-				renderer, 
-				da2s_transform
-			)
-		}
-		
-	}
-	updateTransform(){
-		this.da2p_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.da_rect_in_p))
-	}
-
-}
-
-class PlotArea{
-	constructor({
-		p_rect_in_f = new R(0,0,1,1),
-	}={}){
-		this.p_rect_in_f = p_rect_in_f
-		this.p2f_transform = null
-		this.updateTransform()
-		
-		this.data_areas = new Map()
-		
-	}
-	
-	addDataArea(name, plot_area){
-		this.data_areas.set(name, plot_area)
-	}
-	
-	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
-		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
-	}
-	
-	render(renderer, transform){
-		let p2s_transform = Transformer.combine(this.p2f_transform, transform)
-	
-		// Debug box
-		this.draw(renderer, transform, "rect", [this.p_rect_in_f.r], [this.p_rect_in_f.s], [], {
-			"stroke":"blue",
-			"stroke-width":"0.1",
-		})
-		
-		// data_area
-		for(const [name, data_area] of this.data_areas.entries()){
-			data_area.render(
-				renderer, 
-				p2s_transform
-			)
-		}
-	}
-	
-	updateTransform(){
-		this.p2f_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.p_rect_in_f))
-	}
-
-}
-
-class Figure{
-
-	constructor({
-		f_rect_in_d = new R(0.1,0.1,0.8,-0.8), // rectangle that defines the figure position in display coords
-	}={}){
-		this.f_rect_in_d = f_rect_in_d
-		
-		this.f2d_transform = null // set in a method
-		this.updateTransform()
-		
-		this.toScreen_transform = new Transformer()
-		this.plot_areas = new Map()
-		
-	}
-	
-	addPlotArea(name, plot_area){
-		this.plot_areas.set(name, plot_area)
-	}
-	
-	draw(renderer, element_type, positions, scales, invariants, attrs, group_name = null){
-		renderer.add(element_type, this.toScreen_transform.block_forward(...positions), this.toScreen_transform.block_forward_scale(...scales), invariants, attrs, group_name)
-	}
-	
-	render(renderer){
-		console.log(this.f_rect_in_d)
-		// Debug box
-		this.draw(renderer, "rect", [this.f_rect_in_d.r], [this.f_rect_in_d.s], [], {
-			"stroke":"green",
-			"stroke-width":"0.1",
-		})
-		
-		
-		// plot_area
-		for(const [name, plot_area] of this.plot_areas.entries()){
-			plot_area.render(
-				renderer
-			)
-		}
-	}
-
-	updateTransform(){
-		this.f2d_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.f_rect_in_d))
-	}
-
-	updateScreenTransform(transform){
-		this.toScreen_transform = Transformer.combine(this.f2d_transform, transform)
-	}
-
-}
-
-// Maybe split into Display class and SvgRenderer class?
-class SvgDisplay{
-	constructor({
-		renderTarget = null,
-		s_scale = V.from(6,4), // display scale
-		s_scale_units = "cm", //units of display scale
-	}={}){
-		
-		this.s_scale = s_scale
-		this.s_scale_units = s_scale_units
-		
-		// Unit coords go from zero to one in each dimension
-		this.d_rect_in_s = new R(0,this.s_scale[1],this.s_scale[0],-this.s_scale[1])
-		//this.d_rect_in_s = new R(0,0,1,1)
-		
-		this.frame = new ReferenceFrame(
-			null,
-			R.getTransformFromUnitCoordsTo(this.d_rect_in_s),
-		)
-		
-		this.renderer = new Svg({
-			scale : s_scale,
-			scale_units : s_scale_units,
-		})
-		
-		this.d2s_transform=null
-		this.updateTransform()
-		
-		this.setRendererTarget(renderTarget)
-		
-		this.figures = new Map()
-		
-	}
-	
-	updateTransform(){
-		this.d2s_transform = Transformer.fromT(R.getTransformFromUnitCoordsTo(this.d_rect_in_s))
-		//this.d2s_transform = new Transformer()
-	}
-	
-	addFigure(name, figure){
-		figure.updateScreenTransform(this.d2s_transform)
-		this.figures.set(name, figure)
-	}
-	
-	addFigureFull(name, extent=E.from(0,0,1,1)){
-		this.addFigure(
-			name,
-			new Figure({f_rect_in_d : R.fromExtent(extent)})
-		)
-	}
-	
-	addFigureWithAspectRatio(name, aspect_ratio = 0.5, extent=E.from(0,0,1,1)){
-		if (aspect_ratio >= 1){
-			extent[2]/=aspect_ratio
-		} else {
-			extent[3]*=aspect_ratio
-		}
-		
-		let scaled_shape = V.scalar_div(V.from(...this.s_scale,...this.s_scale), V.min(this.s_scale))
-		console.log("scaled_shape", scaled_shape)
-		
-		let scaled_extent = V.div(extent, scaled_shape)
-		console.log("scaled_extent", scaled_extent)
-		let f_rect_in_d_close_to_unit_coords = R.fromExtent(scaled_extent)
-		console.log("f_rect_in_d_close_to_unit_coords", f_rect_in_d_close_to_unit_coords)
-	
-		this.addFigure(
-			name,
-			new Figure({f_rect_in_d : f_rect_in_d_close_to_unit_coords})
-		)
-	}
-	
-	addFigureOnGrid(name, gridspec=V.from(1,1), gridpos=V.from(0,0), unit_rect_in_grid_cell = new R(0.1,0.1,0.8,0.8)){
-		// gridspec : V(nx, ny)
-		// gridpos : V(ix, iy)
-		// NOTE: Grid indices go from top left instead of bottom left
-		
-		let grid_flow_start = V.from(0,(gridspec[1]-1)/gridspec[1]) // (0, 3/4)
-		let grid_flow_dir = V.from(1,-1)
-		
-		let grid_shape = V.div(V.ones(2), gridspec)
-		console.log("grid_shape", grid_shape)
-		
-		let grid_start =V.prod(grid_flow_dir, V.sub(V.prod(gridpos, grid_shape), grid_flow_start))
-		console.log("grid_start", grid_start)
-		
-		let full_grid_extent = E.from(...grid_start, ...(V.add(grid_start, grid_shape)))
-		console.log("full_grid_extent", full_grid_extent)
-		
-		let full_grid_rect = R.fromExtent(full_grid_extent)
-		
-		let grid_rect = R.fromUnitRectWithinRect(full_grid_rect, unit_rect_in_grid_cell)
-		
-		this.addFigure(
-			name,
-			new Figure({f_rect_in_d : grid_rect})
-		)
-		
-	}
-	
-	draw(renderer, transfrom, element_type, positions, scales, invariants, attrs, group_name = null){
-		renderer.add(element_type, transfrom.block_forward(...positions), transfrom.block_forward_scale(...scales), invariants, attrs, group_name)
-	}
-	
-	render(){
-		// Debug box
-		this.renderer.add( "rect", [this.d_rect_in_s.r], [this.d_rect_in_s.s], [], {
-			"stroke":"red",
-			"stroke-width":"0.1",
-		})
-		
-		// figures
-		for(const [name, figure] of this.figures.entries()){
-			let topright_of_figure = V.add(figure.f_rect_in_d.r, figure.f_rect_in_d.s)
-			figure.draw(this.renderer, "text", [V.from(topright_of_figure[0]/2, topright_of_figure[1])], [], [name], {})
-			
-			figure.render(this.renderer, this.d2s_transform)
-		}
-	}
-	
-	setRendererTarget(renderTarget){
-		assert_all_defined(renderTarget)
-		this.renderer.attachTo(renderTarget)
-	}
-	
-}
-*/
-
-/*
-class DataArea{
-	
-	constructor(
-			label,
-			p2f_transform, // transform from plot coords to figure coords
-			d_rect_in_p = new R(0.2,0.8,0.6,-0.6), // rectangle that defines the data area in plot coords
-			d_extent = E.from(-1.5, 2, -1.5, 2), // extent that defines the data area coords
-			ax_labels=['x-axis', 'y-axis'], // labels for axes
-			ax_auto_resize=[true,true], // should axes resize automatically when data is out of range?
-			n_max_data_points=1024, // Maximum number of data points that can be displayed at once
-			n_dim_data_points = 2, // number of dimensions the data has
-			data_storage_as_ringbuffer = true, // should the data storage work as a ringbuffer?
-		){
-		this.label = label
-		this.p2f_transform = p2f_transform
-		this.d_rect_in_p = d_rect_in_p
-		this.d_extent = d_extent
-		this.ax_labels = ax_labels
-		this.ax_auto_resize = ax_auto_resize
-		this.n_max_data_points = n_max_data_points
-		this.n_dim_data_points = n_dim_data_points
-		this.data_storage_as_ringbuffer = data_storage_as_ringbuffer
-		
-		O.assert_has_attributes(this, 
-			"label", 
-			"p2f_transform", 
-			"d_rect_in_p", 
-			"d_extent", 
-			"ax_labels"
-		)
-		
-		this.n_displayed_data_points = 0
-		this.n_data_points = 0
-		// NOTE: data_point_storage stores the ORIGINAL VALUE of the data point, NOT THE TRANSFORMED VALUE
-		this.data_point_storage = V.of_size(this.n_dim_data_points*this.n_max_data_points, Float32Array) // don't need much precision
-		
-		// Unit to plot and unit to data transforms
-		this.u2p_transform = R.getTransformFromUnitCoordsTo(this.d_rect_in_p)
-		this.u2d_transform = E.getTransformFromUnitCoordsTo(this.d_extent)
-		console.log("DataArea: u2d_transform", this.u2d_transform)
-		
-		// Data to plot transforms
-		this.d2p_transform = T.prod(this.u2p_transform, T.invert(this.u2d_transform)) // d2u then u2p
-		console.log("DataArea: this.d2p_transform", this.d2p_transform)
-		this.p2d_transform = T.invert(this.d2p_transform)
-		
-		// Data to figure transform
-		this.d2f_transform = T.prod(this.p2f_transform, this.d2p_transform)
-		this.d_rect_in_f = this.d_rect_in_p.applyTransform(this.p2f_transform)
-		
-		console.log("DataArea", this.p2f_transform)
-		console.log("DataArea", this.d_rect_in_p, this.d_rect_in_f)
-		console.log("DataArea d2f_transform", this.d2f_transform)
-		
-		this.svg_group = createSvgElement("g", {class:"data-area "+this.label})
-		this.svg_axes_group = createSvgElement("g", {class:"axes"})
-		this.svg_data_group = createSvgElement("g", {class:"data"})
-		
-		this.svg_group.appendChild(this.svg_axes_group)
-		this.svg_group.appendChild(this.svg_data_group)
-		
-		
-		this.svg_scaling_factor =  2E-3*(V.accumulate_sum(V.component_abs(this.d_rect_in_p.s)))
-		console.log("svg_scaling_factor", this.svg_scaling_factor)
-		
-		
-		// debugging box
-		//let bbox_width = 2E-2
-		//let bbox_color = "blue"
-		//this.svg_box = this.d_rect_in_f.asSvg({
-		//	"class":"data-area-bbox",
-		//	"stroke":bbox_color,
-		//	"stroke-width":bbox_width,
-		//	"fill":"none",
-		//	"stroke-opacity":0.3,
-		//})
-		//this.svg_group.appendChild(this.svg_box)
-		
-		
-		
-		this.axes = this.createAxes(this.ax_labels)
-		
-		
-		this.prev_data_point = null
-		
-		// data display params
-		this.p2f_transform = null
-		this.d2f_transform = null
-		
-		this.marker_size = 2*this.svg_scaling_factor
-		this.marker_colour = "blue"
-		this.marker_factory = (x,y)=>{
-			return createSvgElement("circle", {cx:x,cy:y,r:this.marker_size,fill:this.marker_colour})
-		}
-		
-		this.line_width = this.svg_scaling_factor
-		this.line_colour = "blue"
-		this.line_factory = (x1,y1,x2,y2)=>{
-			return createSvgElement("line", {
-				x1:x1,
-				y1:y1,
-				x2:x2,
-				y2:y2,
-				stroke:this.line_colour,
-				"stroke-width":this.line_width,
-			})
-		}
-	}
-	
-	svg(){
-		return this.svg_group
-	}
-	
-	redrawPoints(){
-		console.log("DataArea::redrawPoints()")
-		//remove points
-		this.svg_data_group.replaceChildren()
-		let ringbuffer_full = this.data_storage_as_ringbuffer && (this.n_displayed_data_points == this.n_max_data_points)
-		
-		//
-		
-		console.log(this.n_data_points, this.n_displayed_data_points, ringbuffer_full, this.n_max_data_points, this.n_dim_data_points)
-		
-		let start_idx = 0
-		let count = this.n_data_points
-		if(ringbuffer_full){
-			start_idx = this.n_data_points
-			count = this.n_max_data_points
-		} else {
-		
-		}
-		
-		this.n_data_points = 0
-		this.n_displayed_data_points = 0
-		this.prev_data_point = null
-		
-		for(let i=0;i<count;i++){
-			let data_point = P.at(this.data_point_storage, (start_idx+i)%this.n_max_data_points, this.n_dim_data_points)
-			this.displayDataPoint(this.storeDataPoint(...data_point))
-			this.n_displayed_data_points++
-		}
-		
-	}
-	
-	redrawAxes(){
-		console.log("DataArea::redrawAxes()")
-		this.svg_axes_group.replaceChildren()
-		this.axes = this.createAxes(this.ax_labels)
-		this.createAxesSvg()
-	}
-	
-	recalcDataToFigureTransform(){
-		this.d2f_transform = T.prod(this.p2f_transform, this.d2p_transform)
-		this.d_rect_in_f = this.d_rect_in_p.applyTransform(this.p2f_transform)
-		this.redrawAxes()
-		this.redrawPoints()
-	}
-	
-	recalcDataToPlotTransforms(){
-		this.d2p_transform = T.prod(this.u2p_transform, T.invert(this.u2d_transform)) // d2u then u2p
-		this.p2d_transform = T.invert(this.d2p_transform)
-	}
-	
-	setPlotToFigTransform(p2f_transform){
-		this.p2f_transform = p2f_transform
-		this.recalcDataToFigureTransform()
-	}
-	
-	setRect(d_rect_in_p){
-		this.d_rect_in_p = d_rect_in_p
-		this.u2p_transform = R.getTransformFromUnitCoordsTo(this.d_rect_in_p)
-		this.recalcDataToPlotTransforms()
-		this.recalcDataToFigureTransform()
-	}
-	
-	setExtent(d_extent){
-		console.log("DataArea::setExtent d_extent", d_extent)
-		this.d_extent = d_extent
-		this.u2d_transform = E.getTransformFromUnitCoordsTo(this.d_extent)
-		this.recalcDataToPlotTransforms()
-		this.recalcDataToFigureTransform()
-	}
-	
-	
-	add_data_point(...args){
-		let do_resize = false
-		let new_extent = V.copy(this.d_extent)
-		for(const [i, auto_resize_flag] of this.ax_auto_resize.entries()){
-			if (! auto_resize_flag){
-				continue
-			}
-			if (new_extent[2*i] > args[i]){
-				new_extent[2*i] = args[i]
-				do_resize = true
-			}
-			if (new_extent[2*i+1] < args[i]){
-				new_extent[2*i+1] = args[i]
-				do_resize = true
-			}
-		}
-		
-		if (do_resize){
-			this.setExtent(new_extent)
-		}
-		
-	
-		//console.log("DataArea::add_data_point()")
-		if(this.n_displayed_data_points == this.n_max_data_points){
-			if(this.data_storage_as_ringbuffer){
-				if (this.n_displayed_data_points == this.n_max_data_points){
-					this.svg_data_group.removeChild(this.svg_data_group.firstElementChild)
-					this.n_displayed_data_points--
-				}
-			} else {
-				throw new Error("DataArea is displaying too many datapoints at once")
-			}
-		}
-		
-		this.displayDataPoint(this.storeDataPoint(...args))
-		this.n_displayed_data_points++
-	}
-	
-	storeDataPoint(...args){
-		let data_point = P.set(this.data_point_storage, this.n_data_points, args, this.n_dim_data_points)
-		console.log("DataArea::storeDataPoint() args, data_point", args, data_point)
-		this.n_data_points++
-		
-		if (this.n_data_points >= this.n_max_data_points){
-			if (this.data_storage_as_ringbuffer){
-				this.n_data_points -= this.n_max_data_points
-			} else {
-				throw new Error("DataArea has run out of data storage and we are not using the data storage as a ringbuffer")
-			}
-		}
-		
-		return data_point
-	}
-	
-	displayDataPoint(data_point){
-		console.log("DataArea::displayDataPoint()")
-		
-		console.log(this.d2f_transform)
-		let transformed_point = T.apply(this.d2f_transform, data_point)
-		console.log(data_point, transformed_point)
-		
-		if (this.marker_factory !== null && this.marker_factory !== undefined){
-			this.svg_data_group.appendChild(this.marker_factory(...transformed_point))
-		}
-		if (this.line_factory !== null && this.line_factory !== undefined && this.prev_data_point !== null){
-			this.svg_data_group.appendChild(this.line_factory(...T.apply(this.d2f_transform, this.prev_data_point), ...transformed_point))
-		}
-		
-		this.prev_data_point = data_point
-	}
-	
-	getPlotCoordOfPoint(...args){
-		return [...T.apply(this.d2p_transform, args)]
-	}
-	
-	getPathOfConstantCoord(
-			start_in_p,
-			length_in_p,
-			const_coord_idx,
-			n_segments=1,
-		){
-		console.log("a", start_in_p, length_in_p, const_coord_idx, n_segments)
-		let start_in_d = T.apply(this.p2d_transform, start_in_p)
-		let length_in_d = T.scalar_scale_along_dim(this.p2d_transform, const_coord_idx, length_in_p)
-		let end_in_d = V.add(start_in_d, V.scalar_prod(V.unit(const_coord_idx), length_in_d))
-		console.log("b", start_in_d, length_in_d, end_in_d)
-		
-		let path_in_p = T.apply_block(
-			this.d2p_transform,
-			P.interpolateBetween(start_in_d, end_in_d, n_segments)
-		)
-		
-		console.log("c", path_in_p)
-		
-		return path_in_p
-	}
-	
-	getPointsOfConstantCoord(
-			start_in_p,
-			length_in_p,
-			const_coord_idx,
-			n_points=6,
-		){
-		// Includes endpoints
-		let start_in_d = T.apply(this.p2d_transform, start_in_p)
-		let length_in_d = T.scalar_scale_along_dim(this.p2d_transform, const_coord_idx, length_in_p)
-		let step_in_d = V.scalar_prod(V.unit(const_coord_idx), length_in_d/(n_points-1))
-		
-		console.log(start_in_p, length_in_p, const_coord_idx, n_points)
-		console.log(start_in_d, length_in_d, step_in_d)
-		
-		let points_in_p = []
-		for(let i=0; i<n_points; i++){
-			points_in_p.push(T.apply(this.d2p_transform, V.add(start_in_d, V.scalar_prod(step_in_d, i))))
-		}
-		return points_in_p
-	}
-	
-	createAxesPaths(n_segments = 1){
-		let x_axis_path = this.getPathOfConstantCoord(this.d_rect_in_p.r, this.d_rect_in_p.s[0], 0, n_segments)
-		let y_axis_path = this.getPathOfConstantCoord(this.d_rect_in_p.r, this.d_rect_in_p.s[1], 1, n_segments)
-		
-		return [x_axis_path, y_axis_path]
-	}
-	
-	createAxesTickPositions(x_n_ticks=5, y_n_ticks=5){
-		let x_tick_positions_in_p = this.getPointsOfConstantCoord(this.d_rect_in_p.r, this.d_rect_in_p.s[0], 0, x_n_ticks)
-		let y_tick_positions_in_p = this.getPointsOfConstantCoord(this.d_rect_in_p.r, this.d_rect_in_p.s[1], 1, y_n_ticks)
-		
-		return [x_tick_positions_in_p, y_tick_positions_in_p]
-	}
-	
-	createAxesTicklabels(
-			x_tick_positions_in_p, 
-			y_tick_positions_in_p, 
-			x_label_mod=1, 
-			y_label_mod=1, 
-			x_fmtr=(a)=>formatNumber(a), 
-			y_fmtr=(a)=>formatNumber(a),
-		){
-		let x_ticklabels = []
-		let y_ticklabels = []
-		
-		for(const [i,x_p] of x_tick_positions_in_p.entries()){
-			if(i%x_label_mod == 0){
-				x_ticklabels.push(x_fmtr(T.apply(this.p2d_transform, x_p)[0]))
-			} else {
-				x_ticklabels.push("")
-			}
-		}
-		
-		for(const [i,y_p] of y_tick_positions_in_p.entries()){
-			if(i%y_label_mod == 0){
-				y_ticklabels.push(y_fmtr(T.apply(this.p2d_transform, y_p)[1]))
-			} else {
-				y_ticklabels.push("")
-			}
-		}
-		
-		return [x_ticklabels, y_ticklabels]
-	}
-	
-	createAxes(){
-		let ax_label_pos_in_p = [
-			V.add(this.d_rect_in_p.r, V.prod(this.d_rect_in_p.s, V.from(0.5,-0.15))),
-			V.add(this.d_rect_in_p.r, V.prod(this.d_rect_in_p.s, V.from(-0.2,0.5))),
-		]
-		let ax_paths_in_p = this.createAxesPaths()
-		let ax_tick_positions_in_p = this.createAxesTickPositions()
-		let ax_ticklabels = this.createAxesTicklabels(...ax_tick_positions_in_p)
-		
-		console.log(ax_paths_in_p)
-		console.log(ax_tick_positions_in_p[0].length)
-		console.log(2*this.svg_scaling_factor)
-		
-		let axes = []
-		for(let i=0;i<2;i++){
-			axes.push(
-				new Axis(
-					i,
-					[1,-1],
-					this.ax_labels[i],
-					ax_label_pos_in_p[i],
-					ax_paths_in_p[i],
-					ax_tick_positions_in_p[i],
-					V.const_of_size(ax_tick_positions_in_p[i].length, 0.02),
-					ax_ticklabels[i],
-					this.svg_scaling_factor,
-				)
-			)
-		}
-		for(const axis of axes){
-			this.svg_axes_group.append(axis.svg())
-		}
-		return axes
-	}
-	
-	createAxesSvg(){
-		for(const axis of this.axes){
-			axis.createSvgElements(this.p2f_transform)
-		}
-	}
-	
-	
-}
-
-class Axis{
-	constructor(
-			dim, // dimension number of the axis (0=x, 1=y,...)
-			grow_direction=[1,-1], // direction along dimension that we should put labels etc.
-			label="", // string: axis label
-			label_pos_in_p=V.from(), // position of label in plot coords
-			path_in_p=V.from(), // Float64Array, even indices are x values odd are y values: line that defines the axis (constant value of 1 dimension in data coords)
-			tick_positions_in_p=[], // list of position vectors in plot coords: ticks along axis to help with measuring (constant value of other dimensions in data coords)
-			tick_lengths_in_p = [], // list of lengths in plot coords: lengths of ticks to draw
-			ticklabels=[], //labels for the ticks so we can measure,
-			svg_scaling_factor = 1,
-			
-		){
-		console.log(tick_lengths_in_p)
-		
-		this.dim = dim
-		this.grow_direction = grow_direction
-		this.label = label
-		this.label_pos_in_p = label_pos_in_p
-		this.path_in_p = path_in_p
-		this.tick_positions_in_p = tick_positions_in_p
-		this.tick_lengths_in_p = tick_lengths_in_p
-		this.ticklabels = ticklabels
-		this.svg_scaling_factor = svg_scaling_factor
-		
-		this.svg_group = createSvgElement("g",{class:`axis-${this.dim} ${this.label}`})
-		this.svg_label = null
-		this.svg_path = null
-		this.svg_ticks = []
-		this.svg_ticklabels = []
-	}
-	
-	createSvgElements(
-			p2f_transform, // transform from plot coords to figure coords
-			label_font_family="sans-serif",
-			label_font_size=10,
-			ticklabel_font_family="sans-serif",
-			ticklabel_font_size=8,
-			label_stroke_width=2,
-			ticklabel_stroke_width=1,
-		){
-		
-		let label_pos_in_f = T.apply(p2f_transform, this.label_pos_in_p)
-		console.log("label pos", this.label_pos_in_p, label_pos_in_f)
-		
-		let svg_label_container = createSvgElement(
-		"g", {
-			"class" : `axis-${this.dim}-label`
-		})
-		let svg_label_text = createSvgElement("text", {
-			x:label_pos_in_f[0], 
-			y:label_pos_in_f[1], 
-			"text-anchor":"middle", 
-			"font-family":label_font_family, 
-			"font-size":this.svg_scaling_factor*label_font_size
-		})
-		svg_label_container.appendChild(svg_label_text)
-		this.svg_label = svg_label_container
-		if (this.dim==1){
-			setAttrsFor(this.svg_label, {
-				"transform-origin":`${label_pos_in_f[0]} ${label_pos_in_f[1]}`,
-				transform:"rotate(270)"}
-			)
-		}
-		svg_label_text.textContent = this.label
-		
-		
-		let path_in_f = T.apply_block(p2f_transform, this.path_in_p)
-		console.log("path pos", this.path_in_p, path_in_f)
-		this.svg_path = createSvgElement(
-			"path", 
-			{
-				d:P.toSvgLinearPath(path_in_f),
-				stroke:"black",
-				"stroke-width":this.svg_scaling_factor*label_stroke_width,
-			}
-		)
-		
-		let tick_pos_in_f = V.zero
-		let tick_delta_in_f = V.zero
-		let tick_end_in_f = V.zero
-		let ticklabel_pos_in_f = V.zero
-		for(const [i, tick_pos_in_p] of this.tick_positions_in_p.entries()){
-			
-			
-			// calculate where the ticks should go in figure coords
-			tick_pos_in_f = T.apply(p2f_transform, tick_pos_in_p)
-			console.log("grow_direction", this.grow_direction)
-			console.log(V.scalar_prod(V.unit(this.dim), this.grow_direction[this.dim]*this.tick_lengths_in_p[i]))
-			tick_delta_in_f = T.scale(p2f_transform, V.scalar_prod(V.unit(1-this.dim), this.grow_direction[this.dim]*this.tick_lengths_in_p[i]))
-			tick_end_in_f = V.add(tick_pos_in_f, tick_delta_in_f)
-			
-			
-			console.log("tick pos", i, tick_pos_in_p, tick_pos_in_f, tick_delta_in_f, tick_end_in_f)
-			
-			// Create ticks
-			this.svg_ticks.push(
-				createSvgElement("line", {
-					x1:tick_pos_in_f[0], 
-					y1:tick_pos_in_f[1], 
-					x2:tick_end_in_f[0], 
-					y2:tick_end_in_f[1],
-					"stroke":"black",
-					"stroke-width":this.svg_scaling_factor*ticklabel_stroke_width,
-				})
-			)
-			
-			// If we have ticklabels, use them
-			if ((this.ticklabels[i]!="") && (this.ticklabels[i] !== null)){
-				let svg_ticklabel_container = createSvgElement(
-					"g",
-					{"class":"ticklabel"}
-				)
-				let scaled_ticklabel_font_size = this.svg_scaling_factor*ticklabel_font_size
-				let text_element = createSvgElement("text", {
-					"text-anchor":"middle",
-					"font-family":ticklabel_font_family,
-					"font-size":scaled_ticklabel_font_size,
-				})
-				text_element.textContent = this.ticklabels[i]
-				
-				svg_ticklabel_container.appendChild(text_element)
-				this.svg_ticklabels.push(svg_ticklabel_container)
-				
-				let text_bbox = text_element.getBBox()
-				console.log("text_bbox", text_bbox)
-				console.log("ticklabel length", this.ticklabels[i].length)
-				
-				let text_scale = V.from(
-					scaled_ticklabel_font_size*1,
-					scaled_ticklabel_font_size*0.8*this.ticklabels[i].length*0.5,
-				)
-				let text_pos_adj = [V.from(0,0), V.from(0,0.3*text_scale[0])]
-				
-				ticklabel_pos_in_f = V.add(
-					tick_pos_in_f,
-					V.add(
-						V.add(
-							tick_delta_in_f, 
-							V.scalar_prod(
-								V.unit(1-this.dim), 
-								this.grow_direction[this.dim]*1.1*text_scale[this.dim]
-							)
-						),
-						text_pos_adj[this.dim]
-					)
-				)
-				
-				setAttrsFor(text_element, {
-					x:ticklabel_pos_in_f[0], 
-					y:ticklabel_pos_in_f[1]
-				})
-				
-			}
-		}
-		this.svg_group.append(this.svg_label, this.svg_path, ...this.svg_ticks, ...this.svg_ticklabels)
-		
-	}
-	
-	styleSvgElements(
-			label_style_obj,
-			path_style_obj,
-			tick_style_obj,
-			ticklabel_style_obj
-		){
-		setAttrsFor(this.svg_label, label_style_obj)
-		setAttrsFor(this.svg_path, path_style_obj)
-		for(const item of this.svg_ticks){
-			setAttrsFor(item, tick_style_obj)
-		}
-		for(const item of this.svg_ticklabels){
-			setAttrsFor(item, ticklabel_style_obj)
-		}
-	}
-	
-	svg(){
-		return this.svg_group
-	}
-}
-
-
-
-class PlotArea{
-	constructor(
-		label, // label of plot
-		p_rect_in_f = new R(0,0,1,1), // rectangle that defines this plot area in figure coords
-	){
-		this.label = label
-		this.setRect(p_rect_in_f)
-		
-		console.log("PlotArea", this.p2f_transform)
-		
-		this.svg_group = createSvgElement("g", {id:`plot-area ${this.label}`})
-		
-		
-		// debugging box
-		//let bbox_width = 2E-2
-		//let bbox_color = "green"
-		//this.svg_box = this.p_rect_in_f.asSvg({
-		//	"class":"plot-area-bbox",
-		//	"stroke":bbox_color,
-		//	"stroke-width":bbox_width,
-		//	"fill":"none",
-		//	"stroke-opacity":0.3,
-		//})
-		//this.svg_group.appendChild(this.svg_box)
-		
-		
-		this.data_area_map = new Map()
-		this.current_data_area = null
-	}
-	
-	setRect(p_rect_in_f){
-		this.p_rect_in_f = p_rect_in_f
-		this.p2f_transform = R.getTransformFromUnitCoordsTo(p_rect_in_f) // plot area coords always go from (0,0) to (1,1)
-	}
-	
-	addDataArea(data_area){
-		data_area.setPlotToFigTransform(this.p2f_transform)
-		this.svg_group.appendChild(data_area.svg())
-		this.data_area_map.set(data_area.label, data_area)
-		this.setCurrentDataArea(data_area.label)
-	}
-	
-	setCurrentDataArea(da_label){
-		this.current_data_area = this.data_area_map.get(da_label)
-	}
-	
-	svg(){
-		return this.svg_group
-	}
-	
-	add_data_point(x,y){
-		this.current_data_area.add_data_point(x,y)
-	}
-	
-	addToFigure(svg_fig){
-		svg_fig.addPlotArea(this)
-	}
-}
-
-class SvgFig{
-	constructor(
-			label, // label of the figure
-			parent_element, // element to attach the svg figure as a child of
-			s_scale=V.from(10,10), // scale of svg figure in screen coords
-			f_rect_in_f=new R(0,0,1,1), // rectangle that defines how the figure coords relate to the screen coords
-			scale_units='cm', // units of svg figure scale in screen coords
-			
-			f_rect_units = '', // units of figure coords
-		){
-		this.label = label
-		this.parent_element = parent_element
-		this.s_scale = s_scale
-		this.scale_units = scale_units
-		this.f_rect_in_f = f_rect_in_f
-		this.f_rect_units = f_rect_units
-		this.plot_area_map = new Map()
-		this.current_plot_area = null
-		
-		this.svg = createSvgElement('svg', {
-			width:`${s_scale[0]}${scale_units}`, // width of svg element
-			height:`${s_scale[1]}${scale_units}`, // height of svg element
-		})
-		
-		
-		// debugging box
-		//let bbox_width = 2E-2
-		//let bbox_color = "red"
-		//this.svg_box = this.f_rect_in_f.asSvg({
-		//	"class":"figure-bbox",
-		//	"stroke":bbox_color,
-		//	"stroke-width":bbox_width,
-		//	"fill":"none",
-		//	"stroke-opacity":0.3,
-		//})
-		//this.svg.appendChild(this.svg_box)
-		
-		
-		this.updateViewbox()
-		
-		this.parent_element.appendChild(this.svg)
-	}
-	
-	updateViewbox(){
-		this.svg.setAttribute("viewBox", `${this.f_rect_in_f.r[0]}${this.f_rect_units} ${this.f_rect_in_f.r[1]}${this.f_rect_units} ${this.f_rect_in_f.s[0]}${this.f_rect_units} ${this.f_rect_in_f.s[1]}${this.f_rect_units}`)
-	}
-	
-	addPlotArea(plot_area){
-		this.svg.appendChild(plot_area.svg())
-		this.plot_area_map.set(plot_area.label, plot_area)
-		this.setCurrentPlotArea(plot_area.label)
-	}
-	
-	setCurrentPlotArea(plot_area_label){
-		this.current_plot_area = this.plot_area_map.get(plot_area_label)
-	}
-	
-	add_data_point(x,y){
-		this.current_plot_area.add_data_point(x,y)
-	}
-	
-}
-
-class LinePlot extends PlotArea{
-	constructor({
-			label,
-			ax_labels = ['x-axis', 'y-axis'],
-			ax_extent = E.from(0,1,0,1),
-			p_rect_in_f = new R(0.,0.,1,1),
-			svg_fig = null,
-			
-		}){
-		super(
-			label, 
-			p_rect_in_f
-		)
-		this.line_data_area = new DataArea(
-			'line_data_area', 
-			this.p2f_transform,
-			new R(0.2,0.8,0.6,-0.6),
-			ax_extent,
-			ax_labels
-		)
-		
-		this.addDataArea(this.line_data_area)
-		
-		if (svg_fig !== null){
-			this.addToFigure(svg_fig)
-		}
-		
-	}
-}
-
-class LogLinePlot extends LinePlot{
-	add_data_point(...args){
-		this.current_data_area.add_data_point(args[0], Math.log10(args[1]))
-	}
-}
-
-
-*/

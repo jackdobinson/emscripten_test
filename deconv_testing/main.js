@@ -55,6 +55,10 @@ figure.plot_areas.get("fabs_record").appendAxesFromExtent("fabs_axes", E.from(Na
 
 //figure.plot_areas.get("fabs_record").appendAxesFromExtent("fabs_axes", E.from(-1.2,3.7,-0.9,2))
 figure.plot_areas.get("fabs_record").newDatasetForAxes("fabs_axes", "fabs_dataset")
+
+figure.plot_areas.get("fabs_record").newDatasetForAxes("fabs_axes", "other_dataset")
+
+
 /*
 figure.plot_areas.get("fabs_record").setAsDataset([[0,1]])
 figure.plot_areas.get("fabs_record").appendToDataset([1,2])
@@ -62,6 +66,37 @@ figure.plot_areas.get("fabs_record").appendToDataset([3,0.5])
 figure.plot_areas.get("fabs_record").appendToDataset([5,0.5])
 */
 plot_name_map.set("fabs_record", figure.plot_areas.get("fabs_record"))
+
+let plt = plot_name_map.get("fabs_record")
+plt.setCurrentDataset("fabs_dataset")
+plt.add_data_point(0,0)
+plt.add_data_point(1,1)
+plt.add_data_point(2,4)
+plt.add_data_point(3,9)
+plt.add_data_point(4,16)
+plt.add_data_point(5,25)
+plt.add_data_point(6,36)
+plt.add_data_point(7,49)
+plt.add_data_point(8,64)
+plt.add_data_point(9,80)
+plt.add_data_point(10,100)
+plt.add_data_point(11,121)
+plt.add_data_point(12,144)
+
+plt.setCurrentDataset("other_dataset")
+plt.add_data_point(0,0.5*0)
+plt.add_data_point(1,0.5*1)
+plt.add_data_point(2,0.5*4)
+plt.add_data_point(3,0.5*9)
+plt.add_data_point(4,0.5*16)
+plt.add_data_point(5,0.5*25)
+plt.add_data_point(6,0.5*36)
+plt.add_data_point(7,0.5*49)
+plt.add_data_point(8,0.5*64)
+plt.add_data_point(9,0.5*80)
+plt.add_data_point(10,0.5*100)
+plt.add_data_point(11,0.5*121)
+plt.add_data_point(12,0.5*144)
 
 /*
 let figure_display = new SvgDisplay({
