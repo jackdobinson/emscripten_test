@@ -547,27 +547,31 @@ namespace data_utils{
 
 	// SET ARRAY ELEMENTS
 
-	template<class T>
-	void set_to(std::vector<T>& a, T value){
-		for (auto elem : a){
+	template<class T, class U>
+	void set_to(std::vector<T>& a, U value){
+		for (auto& elem : a){
 			elem = value;
 		}
 	}
 
+	
 	template<class T>
-	void set_linspace(std::vector<T>& a, T min_value, T max_value, size_t n_values){
+	void set_linspace(std::vector<T>& a, T min_value, T max_value, bool include_max = true){
+		size_t n_values = a.size()-(include_max ? 1: 0);
 		T step((max_value - min_value)/n_values);
 		for (size_t i=0; i<a.size(); ++i){
 			a[i] = min_value + i*step;
 		}
 	}
+	
 
 	template<class T>
-	void set_logspace(std::vector<T>& a, T min_value, T max_value, size_t n_values){
+	void set_logspace(std::vector<T>& a, T min_value, T max_value, bool include_max = true){
+		size_t n_values = a.size()- (include_max ? 1 : 0);
 		T factor(max_value/min_value);
 		T factor_step((factor - 1)/n_values);
 		for (size_t i=0; i<a.size(); ++i){
-			a[i] = min_value * (1+factor_step);
+			a[i] = min_value * (1+i*factor_step);
 		}
 	}
 

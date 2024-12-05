@@ -107,6 +107,13 @@ class Dataset{
 		this.read_heads = new Map() // index of next data to read for axes that read data from dataset
 	}
 	
+	clear(){
+		this.storage = []
+		for(const [axes_name, read_head_idx] of this.read_heads.entries()){
+			this.read_heads.set(axes_name, 0)
+		}
+	}
+	
 	set(data){
 		this.storage = data
 	}
@@ -146,6 +153,20 @@ class PlotTypeArtist{
 	// this should be subclassed for different types of plot
 	// The default implementation is a line graph
 	
+	static plot_style_defaults = {
+		marker : "none",
+		"line-type" : "solid", // "solid", "dash", "dot", any combination of "dash" and "dot" separated by "-" e.g. "dot-dash-dot"
+	}
+	
+	static line_style_defaults = {
+		"stroke-width" : 3,
+		"vector-effect" : "non-scaling-stroke",
+	}
+	
+	static marker_style_defaults = {
+		"vector-effect" : "non-scaling-stroke",
+	}
+	
 	static colour_progression = [
 		"blue",
 		"red",
@@ -159,7 +180,8 @@ class PlotTypeArtist{
 	
 	constructor({
 		name = null,
-		
+		classname = null, // sets the class of the containing group, useful for selecting with CSS
+		plot_style={},
 	} = {}){
 		PlotTypeArtist.n_instances++
 	
@@ -167,12 +189,63 @@ class PlotTypeArtist{
 		this.needs_data_init = true
 		this.default_primary_colour = PlotTypeArtist.colour_progression[(PlotTypeArtist.n_instances % PlotTypeArtist.colour_progression.length)]
 		
+		this.setPlotStyle(plot_style)
+		
+		this.svg_parent_to_child_map = new Map()
 		this.svg = new SvgContainer(
-			Svg.group(`group-${this.name}`, null, {})
+			Svg.group(`group-${this.name}`, null, {"class":classname})
 		)
 		this.data_svg = new SvgContainer(
-			this.svg.add('group',`group-data-${this.name}`, null, {})
+			this.svg.add('group',`group-data-${this.name}`, null, {"class":"datapoints"})
 		)
+	}
+	
+	setPlotStyle(...args){
+		console.log("PlotTypeArtist::setPlotStyle() ", ...args, PlotTypeArtist.plot_style_defaults)
+		this.plot_style = O.insertIfNotPresent(...args, PlotTypeArtist.plot_style_defaults)
+	}
+	
+	setLineStyle(...args){
+		this.line_style = O.insertIfNotPresent(...args, PlotTypeArtist.line_style_defaults)
+		
+		let stroke_width = this.line_style["stroke-width"]
+		assert(stroke_width !== undefined, "Must have a stroke width defined")
+		
+		let add_styles = {}
+		if(this.plot_style["line-type"] != "solid"){
+			let dasharray = ""
+			for(const word of this.plot_style["line-type"].split("-")){
+				switch(word){
+					case "dot":
+						dasharray += `${1*stroke_width} ${1*stroke_width} ` // "dash_size gap_size"
+						break
+					case "dash":
+						dasharray += `${3*stroke_width} ${1*stroke_width} ` // "dash_size gap_size"
+						break
+					default:
+						throw Error(`Unrecognised line-type dasharray specifier '${word}' in line-type string '${this.plot_style["line-type"]}'`)
+						break
+				}
+			}
+			add_styles["stroke-dasharray"] = dasharray
+		}
+		this.line_style = O.insertIfNotPresent(this.line_style, add_styles)
+		if (this.line_style["stroke"] === null){
+			this.line_style["stroke"] = this.default_primary_colour
+		}
+		if (this.line_style["fill"] === null){
+			this.line_style["fill"] = this.default_primary_colour
+		}
+	}
+	
+	setMarkerStyle(...args){
+		this.marker_style = O.insertIfNotPresent(...args, PlotTypeArtist.marker_style_defaults)
+		if (this.marker_style["stroke"] === null){
+			this.marker_style["stroke"] = this.default_primary_colour
+		}
+		if (this.marker_style["fill"] === null){
+			this.marker_style["fill"] = this.default_primary_colour
+		}
 	}
 	
 	clear(){
@@ -181,7 +254,15 @@ class PlotTypeArtist{
 	}
 	
 	addSvgTo(parent){
-		parent.appendChild(this.svg.root)
+		this.svg_parent_to_child_map.set(parent, parent.appendChild(this.svg.root))
+	}
+	
+	removeSvgFrom(parent){
+		let child_node = this.svg_parent_to_child_map.get(parent)
+		if(child_node !== undefined){
+			parent.removeChild(this.svg_parent_to_child_map.get(parent))
+			this.this.svg_parent_to_child_map.delete(parent)
+		}
 	}
 	
 	drawData(data){
@@ -205,7 +286,6 @@ class LinePlotArtist extends PlotTypeArtist {
 		"fill-opacity" : 0.6,
 		"stroke-width" : 0.3,
 		"stroke-opacity" : 0.6,
-		"vector-effect" : "non-scaling-stroke",
 	}
 	
 	static line_style_defaults = {
@@ -222,18 +302,21 @@ class LinePlotArtist extends PlotTypeArtist {
 
 	constructor({
 		name = null,
+		classname = null,
+		plot_style = {},
 		marker_type = "circle",
 		marker_style = {},
 		line_style = {},
 	}={}){
-		super({name:name})
-	
+		super({name:name, classname:classname, plot_style:plot_style})
+		
 		this.marker_type = marker_type
 		this.default_marker_name = `marker-${this.name}`
 		this.create_default_marker = false
 		
-		this.setMarkerStyle(marker_style)
-		this.setLineStyle(line_style)
+		this.setPlotStyle(plot_style)
+		this.setMarkerStyle(marker_style, LinePlotArtist.marker_style_defaults)
+		this.setLineStyle(line_style, LinePlotArtist.line_style_defaults)
 	
 	
 		this.defs = new SvgContainer(this.svg.add("defs"))
@@ -255,21 +338,17 @@ class LinePlotArtist extends PlotTypeArtist {
 		)
 	}
 	
-	setMarkerStyle(marker_style={}){
-		this.marker_style = O.insertIfNotPresent(marker_style, LinePlotArtist.marker_style_defaults)
+	setMarkerStyle(...args){
+		super.setMarkerStyle(...args)
+		
 		if(this.marker_style.id === undefined){
 			this.marker_style.id = this.default_marker_name
 		}
-		if (this.marker_style["fill"] === null){
-			this.marker_style["fill"] = this.default_primary_colour
-		}
 	}
 	
-	setLineStyle(line_style={}){
-		this.line_style = O.insertIfNotPresent(line_style, LinePlotArtist.line_style_defaults)
-		if (this.line_style["stroke"] === null){
-			this.line_style["stroke"] = this.default_primary_colour
-		}
+	setLineStyle(...args){
+		super.setLineStyle(...args)
+		
 		if (this.line_style["marker-start"] === null){
 			this.line_style["marker-start"] = `url(#${this.default_marker_name})`
 			this.create_default_marker = true
@@ -315,7 +394,7 @@ class LinePlotArtist extends PlotTypeArtist {
 		}
 	}
 	
-	drawData(data){
+	drawData(data){	
 		// May have to swap this for a DOMPoint at some time in the future
 		if (this.needs_data_init){
 			this.createLine()
@@ -330,6 +409,135 @@ class LinePlotArtist extends PlotTypeArtist {
 		p.y = data[1]
 		this.line.points.appendItem(p)
 		
+	}
+}
+
+class StepPlotArtist extends PlotTypeArtist {
+	
+	static plot_style_defaults = {
+		"step-pos" : 0, // Where do we step from one value to another. 0 - right after the previous datapoint, 1 - right before the current datapoint, 0.5 - mid-way between datapoints
+		"extend-left" : false,
+		"extend-right" : false,
+	}
+	
+	static line_style_defaults = {
+		"stroke" : null,
+		"stroke-width" : 1,
+		"stroke-opacity" : 0.6,
+		"fill" : "none",
+		"fill-opacity" : 0.6,
+	}
+
+	constructor({
+		name = null,
+		classname = null,
+		plot_style = {},
+		marker_type = null,
+		marker_style = {},
+		line_style = {},
+	}={}){
+		super({name:name, classname:classname, plot_style:plot_style})
+	
+		this.marker_type = marker_type
+		this.default_marker_name = `marker-${this.name}`
+		this.create_default_marker = false
+		
+		console.log("StepPlotArtist::constructor")
+		this.setPlotStyle(plot_style, StepPlotArtist.plot_style_defaults)
+		this.setMarkerStyle(marker_style)
+		this.setLineStyle(line_style, StepPlotArtist.line_style_defaults)
+	
+	
+		this.defs = new SvgContainer(this.svg.add("defs"))
+		
+		this.adjust_first_point = false
+		this.previous_point = null
+		this.createLine()
+	}
+	
+	clear(){
+		console.log("StepPlotArtist::clear()")
+		super.clear()
+		this.previous_point = null
+		this.adjust_first_point = false
+	}
+	
+	createLine(){
+		this.needs_data_init = false
+		this.line = this.data_svg.add(
+			"polyline",
+			"",
+			this.line_style
+		)
+	}
+	
+	drawData(data){	
+		//console.log("StepPlotArtist::setLineStyle()", data, this.previous_point)
+		// May have to swap this for a DOMPoint at some time in the future
+		if (this.needs_data_init){
+			this.createLine()
+		}
+		
+		//console.log(this.line)
+		let p_last_value = this.line.ownerSVGElement.createSVGPoint()
+		let p_this_value = this.line.ownerSVGElement.createSVGPoint()
+		
+		if(this.previous_point === null){
+			
+			p_last_value.x = data[0]
+			p_last_value.y = data[1]
+			this.line.points.appendItem(p_last_value)
+			
+			if(this.plot_style["extend-right"]){
+				p_this_value.x = data[0]
+				p_this_value.y = data[1]
+				this.line.points.appendItem(p_this_value)
+			}
+			
+			this.previous_point = V.from(data[0],data[1])
+			this.adjust_first_point = true
+			
+			//console.log(this.line)
+			//console.log(this.line.points)
+		} 
+		else {
+		
+			let delta_x = this.plot_style["step-pos"]*(data[0] - this.previous_point[0])
+			
+			
+			
+			//console.log(this.adjust_first_point, x_pos)
+			if(this.plot_style["extend-left"] && this.adjust_first_point){
+				this.line.points[0].x = this.previous_point[0] - (1-this.plot_style["step-pos"])*(data[0] - this.previous_point[0])
+				this.adjust_first_point = false
+			}
+			
+			if(this.plot_style["extend-right"]){
+				this.line.points[this.line.points.length-1].x = this.previous_point[0] + delta_x
+				
+				p_last_value.x = this.previous_point[0] + delta_x
+				p_last_value.y = data[1]
+				this.line.points.appendItem(p_last_value)
+				
+				p_this_value.x = data[0] + delta_x
+				p_this_value.y = data[1]
+				this.line.points.appendItem(p_this_value)
+			} 
+			else {
+				p_last_value.x = this.previous_point[0] + delta_x
+				p_last_value.y = this.previous_point[1]
+				this.line.points.appendItem(p_last_value)
+				
+				p_this_value.x = this.previous_point[0] + delta_x
+				p_this_value.y = data[1]
+				this.line.points.appendItem(p_this_value)
+			}
+			
+			this.previous_point[0] = data[0]
+			this.previous_point[1] = data[1]
+		}
+		
+		//console.log(this.line)
 	}
 }
 
@@ -401,6 +609,65 @@ class ReferenceFrame{
 }
 
 
+class NonlinearTransform{
+	constructor(forward_fn, backward_fn){
+		this.forward_fn = forward_fn
+		this.backward_fn = backward_fn
+	}
+	
+	apply(values){
+		return this.forward_fn(values)
+	}
+	
+	iapply(values){
+		return this.backward_fn(values)
+	}
+}
+
+// input is in range (0,1) output is also in range (0,1)
+// (0,0) maps to (0,0)
+// (1,1) maps to (1,1)
+// Only the middle bits change
+// e**0 = 1
+// e**1 = e
+// e**2 = e*e
+// log(0) = -inf
+// log(1) = 0
+// log(e) = 1
+
+// z = e**b
+// ln(z) = ln(e**b) = b
+// z**a = (e**b)**(a) = (e**ab)
+// logz(z**a) = a
+// ln(e**ab) = ab
+// ln(e**ab)/ln(z) = a
+// ln(x)/ln(z) = logz(x)
+
+let alpha = 1
+let ln_alpha = Math.log(alpha)
+let exp_alpha = Math.exp(alpha)
+
+let base = 1000
+let log_transform_y = new NonlinearTransform(
+	(a)=>{
+		//console.log("log_transform_y::forward_fn", a, Math.log10(a[1]), Math.log10(90*a[1]+10))
+		let r = V.copy(a)
+		r[1] = Math.log((base-1)*base*r[1]+base)/Math.log(base) - 1
+		//r[1] = Math.log((Math.E-1)*Math.E*r[1] + 1)
+
+		return r
+	}, 
+	(a)=>{
+		//console.log("log_transform_y::backward_fn", a, Math.pow(10, a[1]*10))
+		let r = V.copy(a)
+		r[1] = (Math.pow(base, r[1]) - 1)/(base-1)
+		//r[1] = (Math.exp(r[1]) - 1)/(Math.E -1)
+
+		return r
+	}
+)
+let identity_transform = new NonlinearTransform((x)=>x, (x)=>x)
+
 class Axis{
 	static n_instances = 0
 	
@@ -412,6 +679,7 @@ class Axis{
 		containing_rect,
 		pos_in_rect = 1,
 		name = null,
+		nonlinear_transform = null, // e.g. logarithm
 		
 	}={}){
 		Axis.n_instances++
@@ -422,6 +690,7 @@ class Axis{
 		this.toRoot_transform = toRoot_transform
 		this.containing_rect = containing_rect
 		this.pos_in_rect = pos_in_rect
+		this.nonlinear_transform = nonlinear_transform
 		O.assert_has_attributes(this, "name", "index", "ndim", "fromData_transform", "toRoot_transform", "containing_rect", "pos_in_rect")
 		
 		this.label_anchor_pos = V.scalar_prod(V.ones(this.ndim),0.5)
@@ -557,7 +826,7 @@ class Axis{
 		)
 	}
 	
-	calcTicks(n_ticks=6, tick_length=0.02){
+	calcTicks(n_ticks=7, tick_length=0.02){
 		let tick_direction = -1
 		if(this.pos_in_rect <= 0.5){
 			tick_direction = 1
@@ -627,12 +896,18 @@ class Axis{
 	}
 	
 	calcTickLabels(){
+		// gets the tick labels in data coordinates
 		this.tick_label_set = []
 		
 		for(const [i, tick] of this.tick_set.entries()){
+			console.log(tick, this.nonlinear_transform.iapply(tick))
+		
 			this.tick_label_set.push(
 				Svg.formatNumber(
-					T.apply(this.fromData_transform, tick)[this.index]
+					T.apply(
+						this.fromData_transform, 
+						(this.nonlinear_transform === null) ? tick : this.nonlinear_transform.iapply(tick)
+					)[this.index]
 				)
 			)
 		}
@@ -670,6 +945,7 @@ class AxesSet{
 		autoresize = [true, true], // autoresizing of each axis
 		axis_positions = [0,0], // positions to draw axis compared to data area
 		axis_names = [null,null], //names of component axis objects
+		nonlinear_transform = identity_transform, // nonlinear transforms to apply to axes
 	} = {}){
 		console.log("AxesSet::constructor name", name)
 		
@@ -680,8 +956,10 @@ class AxesSet{
 		
 		this.autoresize = autoresize
 		this.axis_positions = axis_positions
+		this.nonlinear_transform = nonlinear_transform
 		
 		this.registered_datasets = []
+		this.original_extent = V.copy(extent_in_data_coords)
 		this.setExtent(extent_in_data_coords)
 		
 		//console.log("this.toAxis_transform", toAxis_transform)
@@ -701,6 +979,10 @@ class AxesSet{
 		
 	}
 	
+	reset(){
+		this.setExtent(V.copy(this.original_extent))
+	}
+	
 	setExtent(extent_in_data_coords){
 		console.log("extent_in_data_coords2",extent_in_data_coords)
 		assert(this.ndim == extent_in_data_coords.length/2, "New extext must have same number of dimensions as old extent")
@@ -714,7 +996,7 @@ class AxesSet{
 		
 		if (this.data_area !== null){
 			for(const dataset_name of this.registered_datasets){
-				this.data_area.setDatasetTransform(dataset_name, this.fromData_transform)
+				this.data_area.setDatasetTransform(dataset_name, this.fromData_transform, this.nonlinear_transform)
 			}
 		}
 	}
@@ -746,7 +1028,7 @@ class AxesSet{
 			
 			if (this.data_area !== null){
 				for(const dataset_name of this.registered_datasets){
-					this.data_area.setDatasetTransform(dataset_name, this.fromData_transform)
+					this.data_area.setDatasetTransform(dataset_name, this.fromData_transform, this.nonlinear_transform)
 					this.data_area.clearData(dataset_name)
 				}
 			}
@@ -869,7 +1151,8 @@ class AxesSet{
 			toRoot_transform : this.data_area.frame.toRoot_transform, // transform to go from "dataArea" (unit) coords to "root" (screen) coords
 			containing_rect : containing_rect,
 			name : (this.axis_names[this.axis_list.length] === null) ?  `axis-${this.axis_list.length}` : this.axis_names[this.axis_list.length],
-			pos_in_rect : 1 - ((this.axis_positions[this.axis_list.length] === null) ? 0 : this.axis_positions[this.axis_list.length])
+			pos_in_rect : 1 - ((this.axis_positions[this.axis_list.length] === null) ? 0 : this.axis_positions[this.axis_list.length]),
+			nonlinear_transform : this.nonlinear_transform,
 		}))
 	}
 	
@@ -928,8 +1211,10 @@ class DataArea{
 		
 		this.next_dataset_index = 0 // dataset index counter
 		this.dataset_transforms = new Map() // transform from data coords to DataArea coords
+		this.dataset_nonlinear_transforms = new Map() // nonlinear transforms from DataArea coords to nonlinear DataArea coords 
 		
 		this.dataset_plot_type_artists = new Map() // artist for each dataset
+		this.dataset_plot_type_artist_svg_nodes = new Map()
 		this.dataset_svg_holders = new Map() // SVG holders for drawings of datasets
 
 		
@@ -938,6 +1223,12 @@ class DataArea{
 	setDatasetPlotTypeArtist(dataset_name, plot_type_artist){
 		assert_not_null(dataset_name)
 		assert_not_null(plot_type_artist)
+		
+		let da = this.dataset_plot_type_artists.get(dataset_name)
+		if(da !== undefined){
+			// must remove plot_type_artist SVG from data area
+			da.removeSvgFrom(this.svg.root)
+		}
 		this.dataset_plot_type_artists.set(dataset_name, plot_type_artist)
 		plot_type_artist.addSvgTo(this.getDatasetHolder(dataset_name).root)
 	}
@@ -955,8 +1246,9 @@ class DataArea{
 		return da
 	}
 	
-	setDatasetTransform(dataset_name, fromData_transform){
+	setDatasetTransform(dataset_name, fromData_transform, nonlinear_transform = identity_transform){
 		//console.log("fromData_transform", fromData_transform)
+		/*
 		this.dataset_transforms.set(
 			dataset_name, 
 			T.prod(
@@ -964,8 +1256,27 @@ class DataArea{
 				T.invert(fromData_transform)
 			)
 		)
-		
+		*/
+		this.dataset_transforms.set(
+			dataset_name,
+			T.invert(fromData_transform)
+		)
+		console.log("DataArea::setDatasetTransform()",nonlinear_transform)
+		this.dataset_nonlinear_transforms.set(dataset_name, nonlinear_transform)
 	}
+	
+	applyDatasetTransform(dataset_name, data){
+		//console.log("DataArea::applyDatasetTransform()")
+		//console.log(data)
+		data = T.apply(this.dataset_transforms.get(dataset_name), data)
+		//console.log(data)
+		data = this.dataset_nonlinear_transforms.get(dataset_name).apply(data)
+		//console.log(data)
+		data = T.apply(this.frame.toRoot_transform, data)
+		//console.log(data)
+		return data
+	}
+	
 	
 	getDatasetTransform(dataset_name){
 		return this.dataset_transforms.get(dataset_name)
@@ -1003,6 +1314,11 @@ class DataArea{
 		this.dataset_svg_holders.delete(dataset_name)
 	}
 	
+	clear(){
+		for(const [dataset_name, plot_type_artist] of this.dataset_plot_type_artists.entries()){
+			plot_type_artist.clear()
+		}
+	}
 	
 	clearData(dataset_name){
 		let da = this.getDatasetPlotTypeArtist(dataset_name)
@@ -1013,7 +1329,9 @@ class DataArea{
 	
 	drawData(dataset_name, data, default_plot_type_artist = null){
 		//console.log("DataArea::drawData", dataset_name, data, default_plot_type_artist)
-		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(T.apply(this.getDatasetTransform(dataset_name), data))
+		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(
+			this.applyDatasetTransform(dataset_name, data)
+		)
 		
 	}
 	
@@ -1062,6 +1380,25 @@ class PlotArea{
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))
 		
 		
+	}
+	
+	clear(){
+		for(const dataset of this.datasets.values()){
+			dataset.clear()
+		}
+		for(const data_area of this.data_areas.values()){
+			data_area.clear()
+		}
+		for(const axes of this.axes.values()){
+			axes.reset()
+		}
+	}
+	
+	setDatasetPlotTypeArtist(dataset_name, plot_type_artist){
+		for(const axes_name of this.axes_for_dataset.get(dataset_name)){
+			console.log("PlotArea::setDatasetPlotTypeArtist()", axes_name)
+			this.axes.get(axes_name).data_area.setDatasetPlotTypeArtist(dataset_name, plot_type_artist)
+		}
 	}
 	
 	setCurrentAxes(axes_name){
@@ -1206,15 +1543,35 @@ class PlotArea{
 				data_area = this.data_areas.values().next().value
 			}
 		}
+		
+		// If one member of an extent is NaN
+		// we should enable autoresizing in that direction
+		let autoresize = new Array(
+			(extent.length/2>>0) // integer division
+		)
+		for(let i=0; i<autoresize.length; ++i){
+			if(Number.isNaN(extent[2*i]) || Number.isNaN[2*i+1]){
+				autoresize[i] = true
+			} else {
+				autoresize[i] = false
+			}
+		}
+				
 		this.appendAxes(
 			name,
 			new AxesSet(
-				O.insertIfNotPresent({
+				O.insertIfNotPresent( // NOTE: earlier arguments take priority over later arguments
+				{
 					name : name,
 					parent_frame : this.frame,
 					extent_in_data_coords : extent,
 					data_area : data_area,
-				}, axis_attrs)
+				}, 
+				axis_attrs,
+				{
+					autoresize: autoresize
+				}
+				)
 			)
 		)
 	}
@@ -1251,6 +1608,7 @@ class Figure{
 		
 		this.draw()
 	}
+	
 	
 	draw(){
 		this.svg.add(

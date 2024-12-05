@@ -77,7 +77,7 @@ EM_JS(void, js_plot_point, (const char* name, double x, double y), {
 	plot_name_map.get(name).addDataToDataset(null,x,y);
 });
 
-EM_JS(void, js_plot_point_to_dataset, (const char* plot_name, const char* dataset_name, double x, double y), {
+EM_JS(void, js_plot_point_to_dataset, (const char* plot_name, const char* dataset_name, double x, double y, bool clear=false), {
 	plot_name = UTF8ToString(plot_name);
 	dataset_name = UTF8ToString(dataset_name);
 	console.log("EM_JS: js_plot_point", x, y);
@@ -90,7 +90,13 @@ EM_JS(void, js_plot_point_to_dataset, (const char* plot_name, const char* datase
 		console.log(plot_name_map);
 		return;
 	}
-	plot_name_map.get(plot_name).addDataToDataset(dataset_name,x,y);
+	
+	let plot = plot_name_map.get(plot_name);
+	if(clear){
+		console.log("clearing plot", plot_name);
+		plot.clear();
+	}
+	plot.addDataToDataset(dataset_name,x,y);
 });
 
 // TODO: 
@@ -134,6 +140,10 @@ CleanModifiedAlgorithm::CleanModifiedAlgorithm(
 		fabs_record(_n_iter), 
 		rms_record(_n_iter),
 		threshold_record(_n_iter),
+		histogram_n_bins(100),
+		histogram_edges(histogram_n_bins),
+		histogram_counts(histogram_n_bins),
+		temp_data(0),
 		fft(), 
 		ifft(), 
 		psf_fft(), 
@@ -444,9 +454,30 @@ void CleanModifiedAlgorithm::doIter(
 	//du::add_inplace(components_data, current_convolved);
 	du::add_inplace(components_data, selected_pixels);
 
+
+	// NOTE: Plotting preparation etc. goes below this line
+	
 	fabs_record[i] = du::max(du::apply(residual_data, abs ));
 	rms_record[i] = sqrt(du::sum(du::apply(residual_data, du::square ))/residual_data.size());
 	threshold_record[i] = px_threshold;
+	
+	temp_data = residual_data;
+	std::sort(temp_data.begin(), temp_data.end());
+	double temp_av_delta = (temp_data.back() - temp_data.front())/temp_data.size();
+	du::set_linspace(histogram_edges, temp_data.front() - temp_av_delta/2, temp_data.back() + temp_av_delta/2);
+	du::set_to(histogram_counts, 0);
+	// calculate histogram
+	size_t bin_idx = 0;
+	for(double a : temp_data){
+		while(histogram_edges[bin_idx] < a){
+			++bin_idx;
+		}
+		++histogram_counts[bin_idx];
+	}
+	
+	LOGV_DEBUG(histogram_edges);
+	LOGV_DEBUG(histogram_counts);
+	
 	//LOGV_DEBUG(fabs_record[i]);
 	//LOGV_DEBUG(rms_record[i]);
 	
@@ -455,7 +486,9 @@ void CleanModifiedAlgorithm::doIter(
 	js_plot_point_to_dataset("stopping_criteria", "fabs_record", i, fabs_record[i]);
 	js_plot_point_to_dataset("stopping_criteria", "rms_record", i, rms_record[i]);
 	js_plot_point_to_dataset("stopping_criteria", "threshold_record", i, threshold_record[i]);
-	//update_js_plot("threshold_record", threshold_record.data(), threshold_record.size());
+	for(size_t j=0;j < histogram_edges.size(); ++j){
+		js_plot_point_to_dataset("residual_histogram", "residual_histogram_data", histogram_edges[j], histogram_counts[j], j==0);
+	}
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }
@@ -488,6 +521,7 @@ void CleanModifiedAlgorithm::prepare_observations(
 	selected_px_fft.resize(data_size);
 	current_convolved.resize(data_size);
 	components_data.resize(data_size);
+	temp_data.resize(data_size);
 	
 	indices.resize(data_size);
 	for(short i=0; i<indices.size(); ++i){

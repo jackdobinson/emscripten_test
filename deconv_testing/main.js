@@ -49,7 +49,7 @@ let figure = new Figure({
 	container : document.getElementById("progress-plots")
 })
 
-figure.appendPlotAreaFromRect("stopping_criteria", new R(0.1,0.1,0.8,0.8))
+figure.appendPlotAreaFromRect("stopping_criteria", new R(0.05,0.5,0.8,0.4))
 figure.plot_areas.get("stopping_criteria").appendDataAreaFromRect("stopping_criteria_data_area", new R(0.1,0.1,0.8,0.8))
 figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["iteration", "fabs/rms value"]})
 figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes_2", E.from(NaN,NaN,NaN,NaN), {axis_positions : [null, 1], axis_names : ["iteration", "threshold value"]})
@@ -62,10 +62,26 @@ figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_
 figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes", "test_1_dataset")
 figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_axes_2", "test_2_dataset")
 
-plot_name_map.set("stopping_criteria", figure.plot_areas.get("stopping_criteria"))
+figure.plot_areas.get("stopping_criteria").setDatasetPlotTypeArtist("test_2_dataset", new StepPlotArtist())
 
-/*
+
+figure.appendPlotAreaFromRect("residual_histogram", new R(0.05,0.05,0.8,0.4))
+figure.plot_areas.get("residual_histogram").appendDataAreaFromRect("residual_histogram_data_area", new R(0.1,0.1,0.8,0.8))
+figure.plot_areas.get("residual_histogram").appendAxesFromExtent("residual_histogram_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
+figure.plot_areas.get("residual_histogram").newDatasetForAxes("residual_histogram_axes", "residual_histogram_data")
+figure.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("residual_histogram_data", new StepPlotArtist())
+
+
+
+plot_name_map.set("stopping_criteria", figure.plot_areas.get("stopping_criteria"))
+plot_name_map.set("residual_histogram", figure.plot_areas.get("residual_histogram"))
+
+
+
+
+
 let plt = plot_name_map.get("stopping_criteria")
+plt.clear()
 //plt.setCurrentDataset("test_1_dataset")
 plt.addDataToDataset("test_1_dataset", 0,0)
 plt.addDataToDataset("test_1_dataset", 1,1)
@@ -95,7 +111,7 @@ plt.addDataToDataset("test_2_dataset", 9,0.5*80)
 plt.addDataToDataset("test_2_dataset", 10,0.5*100)
 plt.addDataToDataset("test_2_dataset", 11,0.5*121)
 plt.addDataToDataset("test_2_dataset", 12,0.5*144)
-*/
+
 
 download_clean_map_button.addEventListener(
 	"click",
@@ -190,6 +206,13 @@ run_deconv_button.addEventListener("click", async (e)=>{
 
 		console.log("Preparing deconvolver for ${sci_image_holder.name} ${psf_image_holder.name}")
 		await Module.prepare_deconvolver(deconv_type, deconv_name, sci_image_holder.name, psf_image_holder.name, "")
+		
+		
+		// Clear plots
+		for(const plot_area of plot_name_map.values()){
+			plot_area.clear()
+		}
+		
 		
 		
 		console.log("Running prepared deconvolver")

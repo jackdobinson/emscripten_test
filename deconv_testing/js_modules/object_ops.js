@@ -27,10 +27,12 @@ function zip_arrays(...args){
 
 class O{
 
-	static insertIfNotPresent(target, source){
-		for(const [key,value] of Object.entries(source)){
-			if(!Object.hasOwn(target, key)){
-				target[key] = value
+	static insertIfNotPresent(target, ...sources){
+		for (const source of sources){
+			for(const [key,value] of Object.entries(source)){
+				if(!Object.hasOwn(target, key)){
+					target[key] = value
+				}
 			}
 		}
 		return target

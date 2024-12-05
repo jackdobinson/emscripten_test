@@ -4,16 +4,21 @@ class Svg{
 	static createElement(tag, attributes={}){
 		//console.trace()
 		let element = document.createElementNS('http://www.w3.org/2000/svg',tag)
-		for (const key of Object.keys(attributes)){
-			element.setAttribute(key, attributes[key])
-		}
-		return element
+		return Svg.setAttrs(element, attributes)
 	}
 	
 	static setAttrs(element, ...attr_objs){
+		let value = null
 		for (const attrs of attr_objs){
 			for (const key of Object.keys(attrs)){
-				element.setAttribute(key, attrs[key])
+				value = attrs[key]
+				if (key == "class"){
+					if (value !==null ){
+						element.classList.add(value) // classList is a set so no need to test for membership first
+					}
+				} else {
+					element.setAttribute(key, value)
+				}
 			}
 		}
 		return element
