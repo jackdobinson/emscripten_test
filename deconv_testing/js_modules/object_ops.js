@@ -27,6 +27,49 @@ function zip_arrays(...args){
 
 class O{
 
+	static isObject(obj){
+		if((obj !== null) && (typeof(obj) === "object")){
+			return true
+		}
+		return false
+	}
+	
+	static *getClassesOf(obj){
+		if(!O.isObject(obj)){
+			throw Error("Cannot get classes of a non-object type")
+		}
+		let a = obj
+		while(a.constructor != Object){
+			a = Object.getPrototypeOf(a)
+			yield a.constructor
+		}
+	}
+	
+	static *getBasesOf(obj){
+		let klasses = Array.from(O.getClassesOf(obj))
+		for(const klass of klasses.reverse()){
+			yield klass
+		}
+	}
+
+	static getStaticAttrOf(obj, attr){
+		let temp = undefined
+		let value = {}
+		for (const klass of O.getBasesOf(obj)){
+			temp = klass[attr]
+			
+			// Only do something if we have the attribue on the class
+			if(temp !== undefined){
+				if(O.isObject(temp)){
+					Object.assign(value, temp)
+				} else {
+					value = temp
+				}
+			}
+		}
+		return value
+	}
+
 	static insertIfNotPresent(target, ...sources){
 		for (const source of sources){
 			for(const [key,value] of Object.entries(source)){

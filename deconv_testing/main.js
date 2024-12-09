@@ -49,7 +49,7 @@ let figure = new Figure({
 	container : document.getElementById("progress-plots")
 })
 
-figure.appendPlotAreaFromRect("stopping_criteria", new R(0.05,0.5,0.8,0.4))
+figure.appendPlotAreaFromRect("stopping_criteria", new R(0.05,0.5,0.4,0.4))
 figure.plot_areas.get("stopping_criteria").appendDataAreaFromRect("stopping_criteria_data_area", new R(0.1,0.1,0.8,0.8))
 figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["iteration", "fabs/rms value"]})
 figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes_2", E.from(NaN,NaN,NaN,NaN), {axis_positions : [null, 1], axis_names : ["iteration", "threshold value"]})
@@ -64,17 +64,28 @@ figure.plot_areas.get("stopping_criteria").newDatasetForAxes("stopping_criteria_
 
 figure.plot_areas.get("stopping_criteria").setDatasetPlotTypeArtist("test_2_dataset", new StepPlotArtist())
 
+figure.plot_areas.get("stopping_criteria").addDatasetToAxes("stopping_criteria_axes_2", new RingbufferDataset("test_3_dataset",1))
+figure.plot_areas.get("stopping_criteria").setDatasetPlotTypeArtist("test_3_dataset", new VlinePlotArtist())
 
-figure.appendPlotAreaFromRect("residual_histogram", new R(0.05,0.05,0.8,0.4))
+
+figure.appendPlotAreaFromRect("residual_histogram", new R(0.05,0.05,0.4,0.4))
 figure.plot_areas.get("residual_histogram").appendDataAreaFromRect("residual_histogram_data_area", new R(0.1,0.1,0.8,0.8))
 figure.plot_areas.get("residual_histogram").appendAxesFromExtent("residual_histogram_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
 figure.plot_areas.get("residual_histogram").newDatasetForAxes("residual_histogram_axes", "residual_histogram_data")
 figure.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("residual_histogram_data", new StepPlotArtist())
+figure.plot_areas.get("residual_histogram").addDatasetToAxes("residual_histogram_axes", new RingbufferDataset("threshold_line_data",1))
+figure.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("threshold_line_data", new VlinePlotArtist())
 
 
+figure.appendPlotAreaFromRect("component_histogram", new R(0.55,0.05,0.4,0.4))
+figure.plot_areas.get("component_histogram").appendDataAreaFromRect("component_data_area", new R(0.1,0.1,0.8,0.8))
+figure.plot_areas.get("component_histogram").appendAxesFromExtent("component_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
+figure.plot_areas.get("component_histogram").newDatasetForAxes("component_axes", "component_data")
+figure.plot_areas.get("component_histogram").setDatasetPlotTypeArtist("component_data", new StepPlotArtist())
 
 plot_name_map.set("stopping_criteria", figure.plot_areas.get("stopping_criteria"))
 plot_name_map.set("residual_histogram", figure.plot_areas.get("residual_histogram"))
+plot_name_map.set("component_histogram", figure.plot_areas.get("component_histogram"))
 
 
 
@@ -97,7 +108,25 @@ plt.addDataToDataset("test_1_dataset", 10,100)
 plt.addDataToDataset("test_1_dataset", 11,121)
 plt.addDataToDataset("test_1_dataset", 12,144)
 
-//plt.setCurrentDataset("test_2_dataset")
+console.log("Adding test data for 'test_2_dataset'")
+plt.setAsDataset(
+[[0,0.5*0],
+[1,0.5*1],
+[2,0.5*4],
+[3,0.5*9],
+[4,0.5*16],
+[5,0.5*25],
+[6,0.5*36],
+[7,0.5*49],
+[8,0.5*64],
+[9,0.5*80],
+[10,0.5*100],
+[11,0.5*121],
+[12,0.5*144],
+],
+"test_2_dataset"
+)
+/*
 plt.addDataToDataset("test_2_dataset", 0,0.5*0)
 plt.addDataToDataset("test_2_dataset", 1,0.5*1)
 plt.addDataToDataset("test_2_dataset", 2,0.5*4)
@@ -111,6 +140,10 @@ plt.addDataToDataset("test_2_dataset", 9,0.5*80)
 plt.addDataToDataset("test_2_dataset", 10,0.5*100)
 plt.addDataToDataset("test_2_dataset", 11,0.5*121)
 plt.addDataToDataset("test_2_dataset", 12,0.5*144)
+*/
+// Testing vertical line drawing and RingbufferDataset
+//plt.addDataToDataset("test_3_dataset", 3,0)
+//plt.addDataToDataset("test_3_dataset", 9,0)
 
 
 download_clean_map_button.addEventListener(

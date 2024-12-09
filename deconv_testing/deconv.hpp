@@ -96,7 +96,7 @@ class CleanModifiedAlgorithm {
 	std::vector<double> threshold_record;
 	size_t histogram_n_bins;
 	std::vector<double> histogram_edges;
-	std::vector<size_t> histogram_counts;
+	std::vector<uint32_t> histogram_counts;
 	
 	// Temp variables
 	std::vector<double> temp_data;

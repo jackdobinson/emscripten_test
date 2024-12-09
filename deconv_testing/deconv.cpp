@@ -99,6 +99,42 @@ EM_JS(void, js_plot_point_to_dataset, (const char* plot_name, const char* datase
 	plot.addDataToDataset(dataset_name,x,y);
 });
 
+EM_JS(void, js_set_data_of_dataset, (const char* plot_name, const char* dataset_name, void* x_ptr, int x_size, void* y_ptr, int y_size, bool clear=false), {
+	plot_name = UTF8ToString(plot_name);
+	dataset_name = UTF8ToString(dataset_name);
+	console.log("EM_JS: js_set_data_of_dataset");
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if(!plot_name_map.has(plot_name)){
+		console.log("EM_JS: plot name not found", plot_name);
+		console.log(plot_name_map);
+		return;
+	}
+	
+	let plot = plot_name_map.get(plot_name);
+	if(clear){
+		console.log("clearing plot", plot_name);
+		plot.clear();
+	}
+	//let x_points = new Float64Array(Module.HEAPF64, x_ptr, x_size);
+	//let y_points = new Uint32Array(Module.HEAPU32, y_ptr,  y_size);
+	
+	let x_points = Module.HEAPF64.slice(x_ptr/8, x_ptr/8+x_size);
+	let y_points = Module.HEAPU32.slice(y_ptr/4, y_ptr/4+y_size);
+	
+	
+	console.log(x_points);
+	console.log(y_points);
+	
+	plot.setDataAsDataset(
+		dataset_name,
+		x_points,
+		y_points
+	);
+});
+
 // TODO: 
 // * rewrite this to be easier to integrate with the JS side of things
 // * On the JS side, need to be able to get handles for any plots. So they need to be exposed here.
@@ -413,6 +449,23 @@ std::pair<std::vector<double>, std::vector<size_t>> CleanModifiedAlgorithm::_ens
 }
 
 
+// Helper function
+void calculate_histogram(std::vector<double>& temp_data, std::vector<double>& histogram_edges, std::vector<uint32_t>& histogram_counts){
+	//histogram_edges.assign(0, histogram_edges.size());
+	//histogram_counts.assign(0, histogram_counts.size());
+	std::sort(temp_data.begin(), temp_data.end());
+	double temp_av_delta = (temp_data.back() - temp_data.front())/temp_data.size();
+	du::set_linspace(histogram_edges, temp_data.front() - temp_av_delta/2, temp_data.back() + temp_av_delta/2);
+	du::set_to(histogram_counts, 0);
+	// calculate histogram
+	size_t bin_idx = 0;
+	for(double a : temp_data){
+		while(histogram_edges[bin_idx] < a){
+			++bin_idx;
+		}
+		++histogram_counts[bin_idx];
+	}
+}
 
 void CleanModifiedAlgorithm::doIter(
 		size_t i
@@ -461,23 +514,6 @@ void CleanModifiedAlgorithm::doIter(
 	rms_record[i] = sqrt(du::sum(du::apply(residual_data, du::square ))/residual_data.size());
 	threshold_record[i] = px_threshold;
 	
-	temp_data = residual_data;
-	std::sort(temp_data.begin(), temp_data.end());
-	double temp_av_delta = (temp_data.back() - temp_data.front())/temp_data.size();
-	du::set_linspace(histogram_edges, temp_data.front() - temp_av_delta/2, temp_data.back() + temp_av_delta/2);
-	du::set_to(histogram_counts, 0);
-	// calculate histogram
-	size_t bin_idx = 0;
-	for(double a : temp_data){
-		while(histogram_edges[bin_idx] < a){
-			++bin_idx;
-		}
-		++histogram_counts[bin_idx];
-	}
-	
-	LOGV_DEBUG(histogram_edges);
-	LOGV_DEBUG(histogram_counts);
-	
 	//LOGV_DEBUG(fabs_record[i]);
 	//LOGV_DEBUG(rms_record[i]);
 	
@@ -486,9 +522,21 @@ void CleanModifiedAlgorithm::doIter(
 	js_plot_point_to_dataset("stopping_criteria", "fabs_record", i, fabs_record[i]);
 	js_plot_point_to_dataset("stopping_criteria", "rms_record", i, rms_record[i]);
 	js_plot_point_to_dataset("stopping_criteria", "threshold_record", i, threshold_record[i]);
-	for(size_t j=0;j < histogram_edges.size(); ++j){
-		js_plot_point_to_dataset("residual_histogram", "residual_histogram_data", histogram_edges[j], histogram_counts[j], j==0);
-	}
+	
+	temp_data = residual_data;
+	calculate_histogram(temp_data, histogram_edges, histogram_counts);
+	//for(size_t j=0;j < histogram_edges.size(); ++j){
+	//	js_plot_point_to_dataset("residual_histogram", "residual_histogram_data", histogram_edges[j], histogram_counts[j], j==0);
+	//}
+	js_set_data_of_dataset("residual_histogram", "residual_histogram_data", histogram_edges.data(), histogram_edges.size(), histogram_counts.data(), histogram_counts.size());
+	js_plot_point_to_dataset("residual_histogram", "threshold_line_data", threshold_record[i], 0);
+	
+	temp_data = components_data;
+	calculate_histogram(temp_data, histogram_edges, histogram_counts);
+	//for(size_t j=0;j < histogram_edges.size(); ++j){
+	//	js_plot_point_to_dataset("component_histogram", "component_data", histogram_edges[j], histogram_counts[j], j==0);
+	//}
+	js_set_data_of_dataset("component_histogram", "component_data", histogram_edges.data(), histogram_edges.size(), histogram_counts.data(), histogram_counts.size());
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }

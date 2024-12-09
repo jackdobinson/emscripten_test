@@ -98,6 +98,8 @@ character glyphs, we only want to apply transforms to where the text is placed.
 
 */
 
+
+
 class Dataset{
 	constructor(
 		name
@@ -148,22 +150,115 @@ class Dataset{
 	}
 }
 
+class RingbufferDataset extends Dataset {
+	constructor(
+		name,
+		n_max_entries = 1,
+	){
+		super(name)
+		this.n_max_entries = n_max_entries
+		this.write_head = 0
+		this.loop_around = 0
+	}
+	
+	clear(){
+		super.clear()
+		this.write_head = 0
+		this.loop_around = 0
+	}
+	
+	set(data){
+		if (data.length <= n_max_entries){
+			super.set(data)
+			this.loop_around = 0
+			this.write_head = data.length
+		}
+		else {
+			this.storage = new Array(this.n_max_entries)
+			let n_from_final_write = (data.length % this.n_max_entries)
+			this.storage.splice(0,0,...data.slice(data.length-n_from_final_write, n_from_final_write))
+			this.storage.splice(n_from_final_write, 0, ...data.slice(data.length-this.storage.length, data.length-n_from_final_write))
+			this.loop_around = 1
+			this.write_head = n_from_final_write
+		}
+	}
+	
+	push(data){
+		if(this.storage.length == this.n_max_entries){
+			this.storage[this.write_head] = data
+			this.write_head = (this.write_head + 1) % this.n_max_entries
+			this.loop_around = 1
+		} else {
+			this.storage.push(data)
+			this.write_head++
+		}
+	}
+	
+	*getNewData(axes_name){
+		let current_index = this.read_heads.get(axes_name)
+		if (current_index === undefined){
+			current_index = 0 + this.loop_around*this.write_head
+		}
+		
+		let i = 0
+		let read_loop = current_index < this.write_head
+		let n_to_read = this.write_head - current_index
+		
+		if(read_loop){
+			n_to_read += this.loop_around*this.n_max_entries
+		}		
+		while(i < n_to_read){
+			yield this.storage[current_index]
+			current_index = (current_index + 1) % this.n_max_entries
+			i++
+		}
+		
+		this.read_heads.set(axes_name, current_index)
+	}
+	
+	*getData(axes_name){
+		if (this.loop_around == 0){
+			yield* super.getData(axes_name)
+		}
+		else {
+			let i = 0
+			let current_index = this.write_head
+			while(i < this.n_max_entries){
+				yield this.storage[current_index]
+				current_index = (current_index + 1) % this.n_max_entries
+				i++
+			}
+			this.read_heads.set(axes_name, current_index)
+		}
+	}
+}
+
+
 class PlotTypeArtist{
 	// This object is responsible for creating the SVG representation of a dataset
 	// this should be subclassed for different types of plot
 	// The default implementation is a line graph
 	
 	static plot_style_defaults = {
-		marker : "none",
+		"marker-type" : "none",
 		"line-type" : "solid", // "solid", "dash", "dot", any combination of "dash" and "dot" separated by "-" e.g. "dot-dash-dot"
 	}
 	
 	static line_style_defaults = {
 		"stroke-width" : 3,
+		"stroke" : null,
+		"fill" : "none",
+		"stroke-opacity" : 0.6,
+		"fill-opacity" : 0.6,
 		"vector-effect" : "non-scaling-stroke",
 	}
 	
 	static marker_style_defaults = {
+		"stroke-width" : 3,
+		"stroke" : "none",
+		"fill" : null,
+		"stroke-opacity" : 0.6,
+		"fill-opacity" : 0.6,
 		"vector-effect" : "non-scaling-stroke",
 	}
 	
@@ -181,7 +276,9 @@ class PlotTypeArtist{
 	constructor({
 		name = null,
 		classname = null, // sets the class of the containing group, useful for selecting with CSS
-		plot_style={},
+		plot_style = {},
+		line_style = {},
+		marker_style = {},
 	} = {}){
 		PlotTypeArtist.n_instances++
 	
@@ -189,7 +286,7 @@ class PlotTypeArtist{
 		this.needs_data_init = true
 		this.default_primary_colour = PlotTypeArtist.colour_progression[(PlotTypeArtist.n_instances % PlotTypeArtist.colour_progression.length)]
 		
-		this.setPlotStyle(plot_style)
+		this.setStyles(plot_style, line_style, marker_style)
 		
 		this.svg_parent_to_child_map = new Map()
 		this.svg = new SvgContainer(
@@ -200,13 +297,22 @@ class PlotTypeArtist{
 		)
 	}
 	
+	setStyles(plot_style, line_style, marker_style){
+		this.setPlotStyle(plot_style)
+		this.setLineStyle(line_style)
+		this.setMarkerStyle(marker_style)
+	}
+	
 	setPlotStyle(...args){
-		console.log("PlotTypeArtist::setPlotStyle() ", ...args, PlotTypeArtist.plot_style_defaults)
-		this.plot_style = O.insertIfNotPresent(...args, PlotTypeArtist.plot_style_defaults)
+		//console.log("PlotTypeArtist::setPlotStyle() ", ...args, PlotTypeArtist.plot_style_defaults)
+		//console.log("this.constructor.plot_style_defaults", this.constructor.plot_style_defaults)
+		console.log()
+		this.plot_style = O.insertIfNotPresent(...args, O.getStaticAttrOf(this, "plot_style_defaults"))
 	}
 	
 	setLineStyle(...args){
-		this.line_style = O.insertIfNotPresent(...args, PlotTypeArtist.line_style_defaults)
+		//console.log("PlotTypeArtist::setLineStyle() ", ...args, PlotTypeArtist.plot_style_defaults)
+		this.line_style = O.insertIfNotPresent(...args, O.getStaticAttrOf(this, "line_style_defaults"))
 		
 		let stroke_width = this.line_style["stroke-width"]
 		assert(stroke_width !== undefined, "Must have a stroke width defined")
@@ -239,7 +345,8 @@ class PlotTypeArtist{
 	}
 	
 	setMarkerStyle(...args){
-		this.marker_style = O.insertIfNotPresent(...args, PlotTypeArtist.marker_style_defaults)
+		//console.log("PlotTypeArtist::setMarkerStyle() ", ...args, PlotTypeArtist.plot_style_defaults)
+		this.marker_style = O.insertIfNotPresent(...args, O.getStaticAttrOf(this, "marker_style_defaults"))
 		if (this.marker_style["stroke"] === null){
 			this.marker_style["stroke"] = this.default_primary_colour
 		}
@@ -265,7 +372,14 @@ class PlotTypeArtist{
 		}
 	}
 	
+	drawDataWithTransform(data, toRoot_transform){
+		// data is in DataArea coords at this point
+		console.log("PlotTypeArtist::drawDataWithTransform() toRootTransform", toRoot_transform)
+		this.drawData(T.apply(toRoot_transform, data))
+	}
+	
 	drawData(data){
+		// data is is root coords at this point
 		console.log("PlotTypeArtist::drawData is abstract method")
 	}
 	
@@ -279,6 +393,10 @@ class PlotTypeArtist{
 
 
 class LinePlotArtist extends PlotTypeArtist {
+
+	static plot_style_defaults = {
+		"marker-type" : "circle"
+	}
 
 	static marker_style_defaults = {
 		"stroke" : "none",//"context-stroke", // "none"
@@ -304,19 +422,14 @@ class LinePlotArtist extends PlotTypeArtist {
 		name = null,
 		classname = null,
 		plot_style = {},
-		marker_type = "circle",
 		marker_style = {},
 		line_style = {},
 	}={}){
-		super({name:name, classname:classname, plot_style:plot_style})
+		console.log("LinePlotArtist::constructor()")
+		super({name:name, classname:classname, plot_style:plot_style, line_style:line_style, marker_style:marker_style,})
 		
-		this.marker_type = marker_type
 		this.default_marker_name = `marker-${this.name}`
 		this.create_default_marker = false
-		
-		this.setPlotStyle(plot_style)
-		this.setMarkerStyle(marker_style, LinePlotArtist.marker_style_defaults)
-		this.setLineStyle(line_style, LinePlotArtist.line_style_defaults)
 	
 	
 		this.defs = new SvgContainer(this.svg.add("defs"))
@@ -380,7 +493,7 @@ class LinePlotArtist extends PlotTypeArtist {
 			)
 		)
 		
-		switch (this.marker_type) {
+		switch (this.plot_style["marker-type"]) {
 			case "circle":
 				this.default_marker.add(
 					"circle", 
@@ -427,26 +540,25 @@ class StepPlotArtist extends PlotTypeArtist {
 		"fill" : "none",
 		"fill-opacity" : 0.6,
 	}
+	
+	static marker_style_defaults = {}
 
 	constructor({
 		name = null,
 		classname = null,
 		plot_style = {},
-		marker_type = null,
 		marker_style = {},
 		line_style = {},
 	}={}){
-		super({name:name, classname:classname, plot_style:plot_style})
+		console.log("StepPlotArtist::constructor()")
+		super({name:name, classname:classname, plot_style:plot_style, line_style:line_style, marker_style:marker_style,})		
 	
-		this.marker_type = marker_type
+		console.log(Object.getPrototypeOf(this))
+		console.log(Object.getOwnPropertyNames(Object.getPrototypeOf(this)))
+		console.log(Object.getOwnPropertyNames(this.constructor))
+	
 		this.default_marker_name = `marker-${this.name}`
 		this.create_default_marker = false
-		
-		console.log("StepPlotArtist::constructor")
-		this.setPlotStyle(plot_style, StepPlotArtist.plot_style_defaults)
-		this.setMarkerStyle(marker_style)
-		this.setLineStyle(line_style, StepPlotArtist.line_style_defaults)
-	
 	
 		this.defs = new SvgContainer(this.svg.add("defs"))
 		
@@ -472,9 +584,11 @@ class StepPlotArtist extends PlotTypeArtist {
 	}
 	
 	drawData(data){	
-		//console.log("StepPlotArtist::setLineStyle()", data, this.previous_point)
+		console.log("StepPlotArtist::drawData()", data, this.previous_point)
+		console.trace()
 		// May have to swap this for a DOMPoint at some time in the future
 		if (this.needs_data_init){
+			console.log("StepPlotArtist::drawData() initialising data drawing")
 			this.createLine()
 		}
 		
@@ -483,6 +597,7 @@ class StepPlotArtist extends PlotTypeArtist {
 		let p_this_value = this.line.ownerSVGElement.createSVGPoint()
 		
 		if(this.previous_point === null){
+			//console.log("Previous point is null, writing first datapoint")
 			
 			p_last_value.x = data[0]
 			p_last_value.y = data[1]
@@ -498,15 +613,16 @@ class StepPlotArtist extends PlotTypeArtist {
 			this.adjust_first_point = true
 			
 			//console.log(this.line)
-			//console.log(this.line.points)
+			console.log(this.line.points)
 		} 
 		else {
-		
+			//console.log("Previous point is not null, continuing step plot.")
+			//console.log(this.plot_style)
 			let delta_x = this.plot_style["step-pos"]*(data[0] - this.previous_point[0])
 			
+			//console.log("delta_x", delta_x)
 			
 			
-			//console.log(this.adjust_first_point, x_pos)
 			if(this.plot_style["extend-left"] && this.adjust_first_point){
 				this.line.points[0].x = this.previous_point[0] - (1-this.plot_style["step-pos"])*(data[0] - this.previous_point[0])
 				this.adjust_first_point = false
@@ -537,7 +653,47 @@ class StepPlotArtist extends PlotTypeArtist {
 			this.previous_point[1] = data[1]
 		}
 		
-		//console.log(this.line)
+		console.log(this.line)
+	}
+}
+
+class VlinePlotArtist extends PlotTypeArtist {
+	static plot_style_defaults = {}
+	static line_style_defaults = {}
+	static marker_style_defaults = {}
+	
+	constructor({
+		name = null,
+		classname = null,
+		plot_style = {},
+		marker_style = {},
+		line_style = {},
+	}={}){
+		console.log("VlinePlotArtist::constructor()")
+		super({name:name, classname:classname, plot_style:plot_style, line_style:line_style, marker_style:marker_style,})
+		
+		this.lines = new Array()
+	}
+	
+	drawDataWithTransform(data, toRoot_transform){
+		//console.log("VlinePlotArtist::drawDataWithTransform()", data)
+		let p0 = T.apply(toRoot_transform, [data[0],0])
+		let p1 = T.apply(toRoot_transform, [data[0],1])
+		this.drawData([p0[0],p0[1],p1[0],p1[1]])
+	}
+	
+	drawData(data){
+		// only take the x axis value, draw from 0-1 in the y axis
+		
+		//console.log("VlinePlotArtist::drawData()", data)
+		
+		this.lines.push(
+			this.data_svg.add(
+				"line",
+				data,
+				this.line_style
+			)
+		)
 	}
 }
 
@@ -900,7 +1056,7 @@ class Axis{
 		this.tick_label_set = []
 		
 		for(const [i, tick] of this.tick_set.entries()){
-			console.log(tick, this.nonlinear_transform.iapply(tick))
+			//console.log(tick, this.nonlinear_transform.iapply(tick))
 		
 			this.tick_label_set.push(
 				Svg.formatNumber(
@@ -1006,35 +1162,30 @@ class AxesSet{
 			dimensions_updated, // a list of dimensions that have changed from previous value
 		){ // -> bool : true if we needed to perform a redraw, false otherwise
 		assert(this.ndim == dimensions_updated.length, "Cannot change number of dimensions of AxesSet after creation")
-		let perform_redraw = (V.accumulate_sum(dimensions_updated) > 0)
 
-		//console.log("AxesSet::updateWhenExtentChanged", perform_redraw)
-
-		if (perform_redraw){
-			this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
-			assert(!T.is_rank_deficient(this.fromData_transform), "this.fromData_transform must be of full rank")
-			assert(!V.any_nan(this.fromData_transform), "this.fromData_transform not have any NaN entries")
-			//console.log("New transform: ", this.fromData_transform)
-			
-			for( const[i, dim_updated_flag] of dimensions_updated.entries()){
-				if(dim_updated_flag != 0){
-					this.axis_list[i].updateFromDataTransform(this.fromData_transform)
-				}
-				else {
-					// No need to bother with redraws if updated transform will not affect this axis
-					this.axis_list[i].fromData_transform = this.fromData_transform
-				}
+		console.log("AxesSet::updateWhenExtentChanged()")
+	
+		this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
+		assert(!T.is_rank_deficient(this.fromData_transform), "this.fromData_transform must be of full rank")
+		assert(!V.any_nan(this.fromData_transform), "this.fromData_transform not have any NaN entries")
+		//console.log("New transform: ", this.fromData_transform)
+		
+		for( const[i, dim_updated_flag] of dimensions_updated.entries()){
+			if(dim_updated_flag != 0){
+				this.axis_list[i].updateFromDataTransform(this.fromData_transform)
 			}
-			
-			if (this.data_area !== null){
-				for(const dataset_name of this.registered_datasets){
-					this.data_area.setDatasetTransform(dataset_name, this.fromData_transform, this.nonlinear_transform)
-					this.data_area.clearData(dataset_name)
-				}
+			else {
+				// No need to bother with redraws if updated transform will not affect this axis
+				this.axis_list[i].fromData_transform = this.fromData_transform
 			}
 		}
 		
-		return perform_redraw
+		if (this.data_area !== null){
+			for(const dataset_name of this.registered_datasets){
+				this.data_area.setDatasetTransform(dataset_name, this.fromData_transform, this.nonlinear_transform)
+				this.data_area.clearData(dataset_name)
+			}
+		}
 	}
 	
 	registerDataset(dataset_name){
@@ -1056,35 +1207,50 @@ class AxesSet{
 	}
 	
 	drawDataset(dataset){
+		console.log("AxesSet::drawDataset()", dataset, this.name)
 		// Update component axes if required, and draw dataset on the associated "data_area" of this axis
 		//let resize = false
 		let resize = V.of_size(this.ndim, Uint8Array) // uninitialised : {1,5,3,6,...} 
 		let redraw_flag = false
+		
 		for(const data of dataset.getNewData(this.name)){
+			console.log("AxesSet::drawDataset() data entry in dataset", data)
 			resize = V.scalar_prod_inplace(resize, 0) // {0,0,0,...}
+			console.log("AxesSet::drawDataset() resize", resize)
 			for(const [i,ar_flag] of this.autoresize.entries()){
+				//console.log("AxesSet::drawDataset() ar_flag", ar_flag)
 				if(ar_flag){
+					//console.log("AxesSet::drawDataset() this.extent_in_data_coords", this.extent_in_data_coords)
+					console.log("AxesSet::drawDataset() extent comps", this.extent_in_data_coords[i*2], this.extent_in_data_coords[i*2+1], data[i])
 					if(!(this.extent_in_data_coords[i*2] <= data[i])){
+						console.log("AxesSet::drawDataset() data NOT less than lower bound of extent")
 						resize[i] = 1
 						this.extent_in_data_coords[i*2] = data[i]
 					}
 					if(!(data[i] <= this.extent_in_data_coords[i*2 + 1])){
+						console.log("AxesSet::drawDataset() data NOT greater than upper bound of extent")
 						resize[i] = 1
 						this.extent_in_data_coords[i*2+1] = data[i]
 					}
+					console.log("AxesSet::drawDataset() resize", resize)
 					
 					// if our extent has no size, alter it slightly so it is bigger
 					// this avoids problems with transforms later
-					if (resize[i]==1 &&(this.extent_in_data_coords[i*2] == this.extent_in_data_coords[i*2+1])){
-						//console.log("Trying to prevent rank deficient transform")
+					if (resize[i]==1 && (this.extent_in_data_coords[i*2] == this.extent_in_data_coords[i*2+1])){
+						console.log("AxesSet::drawDataset() Trying to prevent rank deficient transform of axis", i)
 						this.extent_in_data_coords[i*2] -= 50*Number.EPSILON
 						this.extent_in_data_coords[i*2+1] += 50*Number.EPSILON
 					}
 				}
 			}
 			
-			redraw_flag = redraw_flag || this.updateWhenExtentChanged(resize)
+			if (V.accumulate_sum(resize) > 0){
+				redraw_flag = true
+				this.updateWhenExtentChanged(resize)
+			}
 		
+			console.log("AxesSet::drawDataset() redraw flag", redraw_flag)
+			
 			if(!redraw_flag){
 				this.data_area.drawData(dataset.name, data)
 			}
@@ -1261,10 +1427,10 @@ class DataArea{
 			dataset_name,
 			T.invert(fromData_transform)
 		)
-		console.log("DataArea::setDatasetTransform()",nonlinear_transform)
+		//console.log("DataArea::setDatasetTransform()",nonlinear_transform)
 		this.dataset_nonlinear_transforms.set(dataset_name, nonlinear_transform)
 	}
-	
+
 	applyDatasetTransform(dataset_name, data){
 		//console.log("DataArea::applyDatasetTransform()")
 		//console.log(data)
@@ -1328,9 +1494,35 @@ class DataArea{
 	}
 	
 	drawData(dataset_name, data, default_plot_type_artist = null){
-		//console.log("DataArea::drawData", dataset_name, data, default_plot_type_artist)
-		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(
-			this.applyDatasetTransform(dataset_name, data)
+		console.log("DataArea::drawData", dataset_name, data, default_plot_type_artist, this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist))
+		//this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(
+		//	this.applyDatasetTransform(dataset_name, data)
+		//)
+		
+		console.log(this.dataset_transforms.get(dataset_name))
+		
+		console.log(T.apply(
+			this.dataset_transforms.get(dataset_name), 
+			data
+		))
+		
+		console.log(
+			this.dataset_nonlinear_transforms.get(dataset_name).apply(
+				T.apply(
+					this.dataset_transforms.get(dataset_name), 
+					data
+				)
+			)
+		)
+		
+		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawDataWithTransform(
+			this.dataset_nonlinear_transforms.get(dataset_name).apply(
+				T.apply(
+					this.dataset_transforms.get(dataset_name), 
+					data
+				)
+			),
+			this.frame.toRoot_transform
 		)
 		
 	}
@@ -1413,15 +1605,37 @@ class PlotArea{
 		this.current_dataset = dataset_name
 	}
 	
+	setDataAsDataset(dataset_name, ...data){
+		this.setAsDataset(data, dataset_name)
+	}
+	
 	setAsDataset(data, dataset_name = null){
+		console.log("PlotArea::setAsDataset()", data, dataset_name)
 		// Sets dataset `dataset_name` to only contain `data`
 		if(dataset_name === null){
 			dataset_name = this.current_dataset
 		}
-		this.datasets.get(dataset_name).set(data)
+		let axes = null
+		let dataset = this.datasets.get(dataset_name)
+		let needs_redraw = false
+		
+		dataset.set(data)
 		// send a message to axes for dataset telling it to draw the new point
 		for(const axes_name of this.axes_for_dataset.get(dataset_name)){
-			this.axes.get(axes_name).drawDataset(this.datasets.get(dataset_name))
+			// if axes.drawDataset(...) returns true, we need to redra
+			axes = this.axes.get(axes_name)
+			needs_redraw = axes.drawDataset(dataset)
+			console.log("PlotArea::setAsDataset ", axes, needs_redraw)
+			
+			if(needs_redraw){				
+				for(const redraw_dataset_name of axes.registered_datasets){
+					console.log("PlotArea::setAsDataset ", redraw_dataset_name)
+					dataset = this.datasets.get(redraw_dataset_name)
+					dataset.resetIterator(axes.name)
+					axes.drawDataset(dataset)
+				}
+			}
+			
 		}
 	}
 	
