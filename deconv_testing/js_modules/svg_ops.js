@@ -122,7 +122,7 @@ class Svg{
 	}
 	
 	static line(path, attrs={}){
-		console.log("path", path)
+		//console.log("path", path)
 		attrs.x1 = path[0]
 		attrs.y1 = path[1]
 		attrs.x2 = path[2]
@@ -249,7 +249,7 @@ class SvgContainer{
 	
 	
 	
-	addText(pos, content, attrs={}, anchor_point=null){
+	addText(pos, content, attrs={}, anchor_point=null, debug=false){
 		// NOTE: anchor_point has its origin at the top left of the bounding box of the text
 		let text_el = Svg.text(pos, content, attrs)
 		this.root.appendChild(text_el)
@@ -271,10 +271,10 @@ class SvgContainer{
 		}
 		
 		//console.log("pos", pos)
-		//this.add("circle", pos, 0.2) // debug visuals
+		
 		
 		let bbox = text_el.getBBox()
-		//this.add("rect", E.from(bbox.x, bbox.y, bbox.x+bbox.width, bbox.y+bbox.height), {"stroke":"red"}) // debug visuals
+		
 		//console.log("bbox", bbox)
 		
 		let pos_anchor_in_bbox = V.prod(anchor_point, [bbox.width, bbox.height])
@@ -282,7 +282,7 @@ class SvgContainer{
 		
 		let pos_anchor = V.add([bbox.x, bbox.y], pos_anchor_in_bbox)
 		//console.log("pos_anchor", pos_anchor)
-		//this.add("circle", pos_anchor, 0.2, {"stroke":"red"}) // debug visuals
+		
 		
 		let diff = V.sub(pos_anchor, pos)
 		//console.log("diff", diff)
@@ -293,11 +293,15 @@ class SvgContainer{
 		text_el.setAttribute("y", new_pos[1])
 		
 		// Debug visuals
-		let debug_rect = new R(bbox.x-diff[0], bbox.y - diff[1], bbox.width, bbox.height)
-		//console.log("debug_rect", debug_rect)
-		//console.log("debug_rect_extent", E.fromRect(debug_rect))
-		//this.add("rect", E.fromRect(debug_rect))
-		
+		if(debug){
+			let debug_rect = new R(bbox.x-diff[0], bbox.y - diff[1], bbox.width, bbox.height)
+			//console.log("debug_rect", debug_rect)
+			//console.log("debug_rect_extent", E.fromRect(debug_rect))
+			this.add("circle", pos_anchor, 0.2, {"stroke":"red"}) // original position of anchor debug visuals
+			this.add("rect", E.from(bbox.x, bbox.y, bbox.x+bbox.width, bbox.y+bbox.height), {"stroke":"red"}) // original box debug visuals
+			this.add("circle", pos, 0.2, {}) // new position of anchor debug visuals
+			this.add("rect", E.fromRect(debug_rect)) // new box debug visuals
+		}
 		
 		return text_el
 	}

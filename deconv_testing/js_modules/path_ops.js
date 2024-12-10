@@ -54,7 +54,7 @@ class P{
 			}
 			pathlen += Math.sqrt(seglen)
 		}
-		console.log("pathlen", pathlen)
+		//console.log("pathlen", pathlen)
 		
 		// distance to emit points
 		let k=0
@@ -65,19 +65,19 @@ class P{
 		pathlen = 0 // reset to zero
 		// Loop over segments and emit points
 		for(const segment of P.iterateOver(path, 2*ndim)){
-			console.log("segment", segment)
+			//console.log("segment", segment)
 			seglen = 0
 			for(i=0;i<ndim;++i){
 				seglen += (segment[ndim+i]-segment[i])*(segment[ndim+i]-segment[i])
 			}
 			seglen = Math.sqrt(seglen)
 			frac_along_segment = (j*delta - pathlen)/seglen
-			console.log("pathlen", pathlen)
-			console.log("seglen", seglen)
+			//console.log("pathlen", pathlen)
+			//console.log("seglen", seglen)
 			
 			
 			while(frac_along_segment <= 1){
-				console.log("frac_along_segment", frac_along_segment)
+				//console.log("frac_along_segment", frac_along_segment)
 				// this segment has a point we should emit
 				
 				//console.log(segment.subarray(ndim,2*ndim)) // end

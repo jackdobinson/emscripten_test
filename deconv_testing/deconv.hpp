@@ -67,6 +67,9 @@ class CleanModifiedAlgorithm {
 	double rms_frac_threshold;
 	double fabs_frac_threshold;
 	
+	// Plot control parameters
+	size_t plot_update_interval;
+	
 	// Input data parameters
 	size_t data_size;
 	std::vector<size_t> data_shape;
@@ -74,7 +77,7 @@ class CleanModifiedAlgorithm {
 	std::vector<double> components_data;
 	std::vector<double> clean_map;
 	std::vector<bool> px_choice_map;
-
+	
 	// Internal state
 	std::vector<int> data_shape_adjustment;
 	double px_threshold;
@@ -130,7 +133,7 @@ class CleanModifiedAlgorithm {
 		std::vector<size_t>
 	> _ensure_odd(const std::vector<double>& obs_data, const std::vector<size_t>& obs_shape);
 
-	void doIter(
+	bool doIter(
 		size_t i
 	);
 	

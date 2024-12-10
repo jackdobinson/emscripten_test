@@ -41,7 +41,7 @@ CXXFLAGS=                       \
 	-sASSERTIONS=2              \
 	-sSTACK_OVERFLOW_CHECK=2    \
 	-sENVIRONMENT=web           \
-	-sALLOW_MEMORY_GROWTH=1     \
+	-sINITIAL_HEAP=262144000    \
 	-sEXPORTED_FUNCTIONS=[$(subst $(space),$(comma),$(EXPORT_FUNCS))] \
 	-sNO_DISABLE_EXCEPTION_CATCHING \
 	-mnontrapping-fptoint       \
@@ -57,11 +57,11 @@ CXXFLAGS=                       \
 	-std=gnu++20                \
 	-Wshadow
 
-
+#	-sALLOW_MEMORY_GROWTH=1     \
 #	-fexceptions                \
 
 deconv.js : *.cpp *.h *.hpp
 	$(CXX) file_like.cpp deconv.cpp str_printf.cpp data_utils.cpp fft.cpp storage.cpp tiff_helper.cpp main.cpp -o deconv.js $(CXXFLAGS)
 
 clean:
-	rm -f deconv
+	rm -f deconv.js

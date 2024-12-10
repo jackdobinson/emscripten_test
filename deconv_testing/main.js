@@ -34,6 +34,26 @@ let deconv_residual = null
 
 let clean_modified_params = new CleanModifiedParameters(document.getElementById("parameter-container"))
 
+let progress_plot_details = document.getElementById("progress-plot-details")
+let plot_container_1 = document.getElementById("plot-container-1")
+plot_container_1.hide = ()=>{
+	plot_container_1.setAttribute("style","height:0px;overflow:hidden")
+}
+plot_container_1.show = ()=>{
+	plot_container_1.setAttribute("style","height:auto;overflow:visible")
+}
+plot_container_1.hide()
+
+progress_plot_details.onclick = (e)=>{
+	
+	if(progress_plot_details.hasAttribute("open")){
+		// We are closing the details
+		plot_container_1.hide()
+	}
+	else {
+		plot_container_1.show()
+	}
+}
 /*
 let svg_figure = new SvgFig(
 	"progress plots", 
@@ -42,14 +62,19 @@ let svg_figure = new SvgFig(
 	new R(0,0,2,2)
 )
 */
-
+let dataset_cpp_array_cache = new Map();
 let plot_name_map = new Map();
 
+let fig_shape = V.from(48,32)
+let fig_units = "rem"
+
 let figure = new Figure({
-	container : document.getElementById("progress-plots")
+	container : document.getElementById("progress-plots"),
+	shape : fig_shape,
+	units : fig_units
 })
 
-figure.appendPlotAreaFromRect("stopping_criteria", new R(0.05,0.5,0.4,0.4))
+figure.appendPlotAreaFromRect("stopping_criteria", new R(0.05,0.05,0.9,0.9))
 figure.plot_areas.get("stopping_criteria").appendDataAreaFromRect("stopping_criteria_data_area", new R(0.1,0.1,0.8,0.8))
 figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["iteration", "fabs/rms value"]})
 figure.plot_areas.get("stopping_criteria").appendAxesFromExtent("stopping_criteria_axes_2", E.from(NaN,NaN,NaN,NaN), {axis_positions : [null, 1], axis_names : ["iteration", "threshold value"]})
@@ -67,26 +92,60 @@ figure.plot_areas.get("stopping_criteria").setDatasetPlotTypeArtist("test_2_data
 figure.plot_areas.get("stopping_criteria").addDatasetToAxes("stopping_criteria_axes_2", new RingbufferDataset("test_3_dataset",1))
 figure.plot_areas.get("stopping_criteria").setDatasetPlotTypeArtist("test_3_dataset", new VlinePlotArtist())
 
+let figure2 = new Figure({
+	container : document.getElementById("progress-plots"),
+	shape : fig_shape,
+	units : fig_units
+})
+figure2.appendPlotAreaFromRect("residual_histogram",  new R(0.05,0.05,0.9,0.9))
+figure2.plot_areas.get("residual_histogram").appendDataAreaFromRect("residual_histogram_data_area", new R(0.1,0.1,0.8,0.8))
+figure2.plot_areas.get("residual_histogram").appendAxesFromExtent("residual_histogram_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
+figure2.plot_areas.get("residual_histogram").newDatasetForAxes("residual_histogram_axes", "residual_histogram_data")
+figure2.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("residual_histogram_data", new StepPlotArtist())
+figure2.plot_areas.get("residual_histogram").addDatasetToAxes("residual_histogram_axes", new RingbufferDataset("threshold_line_data",1))
+figure2.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("threshold_line_data", new VlinePlotArtist())
 
-figure.appendPlotAreaFromRect("residual_histogram", new R(0.05,0.05,0.4,0.4))
-figure.plot_areas.get("residual_histogram").appendDataAreaFromRect("residual_histogram_data_area", new R(0.1,0.1,0.8,0.8))
-figure.plot_areas.get("residual_histogram").appendAxesFromExtent("residual_histogram_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
-figure.plot_areas.get("residual_histogram").newDatasetForAxes("residual_histogram_axes", "residual_histogram_data")
-figure.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("residual_histogram_data", new StepPlotArtist())
-figure.plot_areas.get("residual_histogram").addDatasetToAxes("residual_histogram_axes", new RingbufferDataset("threshold_line_data",1))
-figure.plot_areas.get("residual_histogram").setDatasetPlotTypeArtist("threshold_line_data", new VlinePlotArtist())
+let figure3 = new Figure({
+	container : document.getElementById("progress-plots"),
+	shape : fig_shape,
+	units : fig_units
+})
+figure3.appendPlotAreaFromRect("component_histogram",  new R(0.05,0.05,0.9,0.9))
+figure3.plot_areas.get("component_histogram").appendDataAreaFromRect("component_data_area", new R(0.1,0.1,0.8,0.8))
+figure3.plot_areas.get("component_histogram").appendAxesFromExtent("component_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
+figure3.plot_areas.get("component_histogram").newDatasetForAxes("component_axes", "component_data")
+figure3.plot_areas.get("component_histogram").setDatasetPlotTypeArtist("component_data", new StepPlotArtist())
 
 
-figure.appendPlotAreaFromRect("component_histogram", new R(0.55,0.05,0.4,0.4))
-figure.plot_areas.get("component_histogram").appendDataAreaFromRect("component_data_area", new R(0.1,0.1,0.8,0.8))
-figure.plot_areas.get("component_histogram").appendAxesFromExtent("component_axes", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
-figure.plot_areas.get("component_histogram").newDatasetForAxes("component_axes", "component_data")
-figure.plot_areas.get("component_histogram").setDatasetPlotTypeArtist("component_data", new StepPlotArtist())
+let figure4 = new Figure({
+	container : document.getElementById("progress-plots"),
+	shape : fig_shape,
+	units : fig_units
+})
+figure4.appendPlotAreaFromRect("selected_pixels_histogram", new R(0.05,0.05,0.9,0.9))
+figure4.plot_areas.get("selected_pixels_histogram").appendDataAreaFromRect("sp_data_area", new R(0.1,0.1,0.8,0.8))
+figure4.plot_areas.get("selected_pixels_histogram").appendAxesFromExtent("sp_data_area", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
+figure4.plot_areas.get("selected_pixels_histogram").newDatasetForAxes("sp_data_area", "selected_pixels_data")
+figure4.plot_areas.get("selected_pixels_histogram").setDatasetPlotTypeArtist("selected_pixels_data", new StepPlotArtist())
+
+
+let figure5 = new Figure({
+	container : document.getElementById("progress-plots"),
+	shape : fig_shape,
+	units : fig_units
+})
+figure5.appendPlotAreaFromRect("current_convolved_histogram", new R(0.05,0.05,0.9,0.9))
+figure5.plot_areas.get("current_convolved_histogram").appendDataAreaFromRect("cc_data_area", new R(0.1,0.1,0.8,0.8))
+figure5.plot_areas.get("current_convolved_histogram").appendAxesFromExtent("cc_data_area", E.from(NaN,NaN,NaN,NaN), {axis_names : ["value", "count"], nonlinear_transform : log_transform_y})
+figure5.plot_areas.get("current_convolved_histogram").newDatasetForAxes("cc_data_area", "current_convolved_data")
+figure5.plot_areas.get("current_convolved_histogram").setDatasetPlotTypeArtist("current_convolved_data", new StepPlotArtist())
+
 
 plot_name_map.set("stopping_criteria", figure.plot_areas.get("stopping_criteria"))
-plot_name_map.set("residual_histogram", figure.plot_areas.get("residual_histogram"))
-plot_name_map.set("component_histogram", figure.plot_areas.get("component_histogram"))
-
+plot_name_map.set("residual_histogram", figure2.plot_areas.get("residual_histogram"))
+plot_name_map.set("component_histogram", figure3.plot_areas.get("component_histogram"))
+plot_name_map.set("selected_pixels_histogram", figure4.plot_areas.get("selected_pixels_histogram"))
+plot_name_map.set("current_convolved_histogram", figure5.plot_areas.get("current_convolved_histogram"))
 
 
 

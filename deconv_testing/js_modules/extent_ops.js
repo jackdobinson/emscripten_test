@@ -42,17 +42,17 @@ class E{
 		for(let i=0;i<extent.length;i+=2){
 			a[i/2] = extent[i+1] - extent[i]
 		}
-		console.log("getScale", a)
+		//console.log("getScale", a)
 		return a
 	}
 	
 	static getOffset(extent){
 		let a = V.of_size(E.getNDim(extent))
 		for(let i=0;i<extent.length;i+=2){
-			console.log(i, i/2, extent[i])
+			//console.log(i, i/2, extent[i])
 			a[i/2] = extent[i]
 		}
-		console.log("getExtent", a)
+		//console.log("getExtent", a)
 		return a
 	}
 	

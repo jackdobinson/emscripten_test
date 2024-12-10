@@ -1,9 +1,18 @@
 
 
+html{
+	background-color: #BBBBCC;
+}
+
+body{
+	width:50rem;
+	margin: auto;
+	background-color: #FFFFFF;
+	padding: 0.5rem;
+}
 
 
-
-.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+.emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: none;}
 textarea.emscripten { font-family: monospace; width: 80%; }
 div.emscripten { text-align: center; }
 div.emscripten_border { border: 1px solid black; }
@@ -62,6 +71,11 @@ canvas {
 .item{
 	width:fit-content;
 	height:fit-content;
+}
+
+.auto-size{
+	width: auto;
+	height: auto;
 }
 
 div.h-flow{

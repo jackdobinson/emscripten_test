@@ -306,7 +306,7 @@ class PlotTypeArtist{
 	setPlotStyle(...args){
 		//console.log("PlotTypeArtist::setPlotStyle() ", ...args, PlotTypeArtist.plot_style_defaults)
 		//console.log("this.constructor.plot_style_defaults", this.constructor.plot_style_defaults)
-		console.log()
+		//console.log()
 		this.plot_style = O.insertIfNotPresent(...args, O.getStaticAttrOf(this, "plot_style_defaults"))
 	}
 	
@@ -374,13 +374,13 @@ class PlotTypeArtist{
 	
 	drawDataWithTransform(data, toRoot_transform){
 		// data is in DataArea coords at this point
-		console.log("PlotTypeArtist::drawDataWithTransform() toRootTransform", toRoot_transform)
+		//console.log("PlotTypeArtist::drawDataWithTransform() toRootTransform", toRoot_transform)
 		this.drawData(T.apply(toRoot_transform, data))
 	}
 	
 	drawData(data){
 		// data is is root coords at this point
-		console.log("PlotTypeArtist::drawData is abstract method")
+		//console.log("PlotTypeArtist::drawData is abstract method")
 	}
 	
 	drawDataIterable(data_iterable){
@@ -425,7 +425,7 @@ class LinePlotArtist extends PlotTypeArtist {
 		marker_style = {},
 		line_style = {},
 	}={}){
-		console.log("LinePlotArtist::constructor()")
+		//console.log("LinePlotArtist::constructor()")
 		super({name:name, classname:classname, plot_style:plot_style, line_style:line_style, marker_style:marker_style,})
 		
 		this.default_marker_name = `marker-${this.name}`
@@ -550,12 +550,12 @@ class StepPlotArtist extends PlotTypeArtist {
 		marker_style = {},
 		line_style = {},
 	}={}){
-		console.log("StepPlotArtist::constructor()")
+		//console.log("StepPlotArtist::constructor()")
 		super({name:name, classname:classname, plot_style:plot_style, line_style:line_style, marker_style:marker_style,})		
 	
-		console.log(Object.getPrototypeOf(this))
-		console.log(Object.getOwnPropertyNames(Object.getPrototypeOf(this)))
-		console.log(Object.getOwnPropertyNames(this.constructor))
+		//console.log(Object.getPrototypeOf(this))
+		//console.log(Object.getOwnPropertyNames(Object.getPrototypeOf(this)))
+		//console.log(Object.getOwnPropertyNames(this.constructor))
 	
 		this.default_marker_name = `marker-${this.name}`
 		this.create_default_marker = false
@@ -568,7 +568,7 @@ class StepPlotArtist extends PlotTypeArtist {
 	}
 	
 	clear(){
-		console.log("StepPlotArtist::clear()")
+		//console.log("StepPlotArtist::clear()")
 		super.clear()
 		this.previous_point = null
 		this.adjust_first_point = false
@@ -584,11 +584,11 @@ class StepPlotArtist extends PlotTypeArtist {
 	}
 	
 	drawData(data){	
-		console.log("StepPlotArtist::drawData()", data, this.previous_point)
-		console.trace()
+		//console.log("StepPlotArtist::drawData()", data, this.previous_point)
+		//console.trace()
 		// May have to swap this for a DOMPoint at some time in the future
 		if (this.needs_data_init){
-			console.log("StepPlotArtist::drawData() initialising data drawing")
+			//console.log("StepPlotArtist::drawData() initialising data drawing")
 			this.createLine()
 		}
 		
@@ -613,7 +613,7 @@ class StepPlotArtist extends PlotTypeArtist {
 			this.adjust_first_point = true
 			
 			//console.log(this.line)
-			console.log(this.line.points)
+			//console.log(this.line.points)
 		} 
 		else {
 			//console.log("Previous point is not null, continuing step plot.")
@@ -653,7 +653,7 @@ class StepPlotArtist extends PlotTypeArtist {
 			this.previous_point[1] = data[1]
 		}
 		
-		console.log(this.line)
+		//console.log(this.line)
 	}
 }
 
@@ -669,7 +669,7 @@ class VlinePlotArtist extends PlotTypeArtist {
 		marker_style = {},
 		line_style = {},
 	}={}){
-		console.log("VlinePlotArtist::constructor()")
+		//console.log("VlinePlotArtist::constructor()")
 		super({name:name, classname:classname, plot_style:plot_style, line_style:line_style, marker_style:marker_style,})
 		
 		this.lines = new Array()
@@ -715,12 +715,12 @@ class ReferenceFrame{
 	}
 	
 	static fromExtent(parent_frame, this_extent_in_parent){
-		console.log("this_extent_in_parent", this_extent_in_parent)
+		//console.log("this_extent_in_parent", this_extent_in_parent)
 		return ReferenceFrame.fromRect(parent_frame, R.fromExtent(this_extent_in_parent))
 	}
 
 	static fromExtentReverse(parent_frame, this_extent_in_parent){
-		console.log("this_extent_in_parent", this_extent_in_parent)
+		//console.log("this_extent_in_parent", this_extent_in_parent)
 		return ReferenceFrame.fromRectReverse(parent_frame, R.fromExtent(this_extent_in_parent))
 	}
 	
@@ -731,7 +731,7 @@ class ReferenceFrame{
 	){
 		assert(parent_frame !== undefined, "parent frame cannot be undefined, but may be null")
 		this.parent_frame = parent_frame
-		console.log("this.parent_frame", this.parent_frame)
+		//console.log("this.parent_frame", this.parent_frame)
 		
 		
 		
@@ -988,14 +988,14 @@ class Axis{
 			tick_direction = 1
 		}
 	
-		console.log("this.path", this.path)
+		//console.log("this.path", this.path)
 		let tick_displacement = V.scalar_prod(V.sub(V.ones(this.ndim),V.unit(this.index, this.ndim)), tick_direction*tick_length)
-		console.log("tick_displacement",tick_displacement)
+		//console.log("tick_displacement",tick_displacement)
 		
 		let starts = P.interpolatePointsAlong(this.path, n_ticks, this.ndim)
-		console.log("starts", starts)
+		//console.log("starts", starts)
 		let ends = V.block_apply(V.add, starts, tick_displacement, this.ndim)
-		console.log("ends", ends)
+		//console.log("ends", ends)
 		
 		this.tick_set = []
 		for(let i=0;i<n_ticks;i++){
@@ -1035,7 +1035,7 @@ class Axis{
 		)
 		this.tick_label_anchor_pos[this.index] = 0.5
 		
-		console.log("this.tick_label_anchor_pos", this.tick_label_anchor_pos)
+		//console.log("this.tick_label_anchor_pos", this.tick_label_anchor_pos)
 		
 		for(const [i, tick] of this.tick_set.entries()){
 			this.tick_label_pos_set.push(
@@ -1103,7 +1103,7 @@ class AxesSet{
 		axis_names = [null,null], //names of component axis objects
 		nonlinear_transform = identity_transform, // nonlinear transforms to apply to axes
 	} = {}){
-		console.log("AxesSet::constructor name", name)
+		//console.log("AxesSet::constructor name", name)
 		
 		AxesSet.n_instances++
 		this.ndim = extent_in_data_coords.length/2
@@ -1130,9 +1130,7 @@ class AxesSet{
 		
 		this.attachDataArea(data_area)
 		
-		console.log("this.data_area", this.data_area)
-		console.trace()
-		
+		//console.log("this.data_area", this.data_area)	
 	}
 	
 	reset(){
@@ -1140,7 +1138,7 @@ class AxesSet{
 	}
 	
 	setExtent(extent_in_data_coords){
-		console.log("extent_in_data_coords2",extent_in_data_coords)
+		//console.log("extent_in_data_coords2",extent_in_data_coords)
 		assert(this.ndim == extent_in_data_coords.length/2, "New extext must have same number of dimensions as old extent")
 		this.extent_in_data_coords = extent_in_data_coords
 		this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
@@ -1163,7 +1161,7 @@ class AxesSet{
 		){ // -> bool : true if we needed to perform a redraw, false otherwise
 		assert(this.ndim == dimensions_updated.length, "Cannot change number of dimensions of AxesSet after creation")
 
-		console.log("AxesSet::updateWhenExtentChanged()")
+		//console.log("AxesSet::updateWhenExtentChanged()", this.extent_in_data_coords)
 	
 		this.fromData_transform = R.getTransformFromUnitCoordsTo(R.fromExtent(this.extent_in_data_coords))
 		assert(!T.is_rank_deficient(this.fromData_transform), "this.fromData_transform must be of full rank")
@@ -1207,37 +1205,37 @@ class AxesSet{
 	}
 	
 	drawDataset(dataset){
-		console.log("AxesSet::drawDataset()", dataset, this.name)
+		//console.log("AxesSet::drawDataset()", dataset, this.name)
 		// Update component axes if required, and draw dataset on the associated "data_area" of this axis
 		//let resize = false
 		let resize = V.of_size(this.ndim, Uint8Array) // uninitialised : {1,5,3,6,...} 
 		let redraw_flag = false
 		
 		for(const data of dataset.getNewData(this.name)){
-			console.log("AxesSet::drawDataset() data entry in dataset", data)
+			//console.log("AxesSet::drawDataset() data entry in dataset", data)
 			resize = V.scalar_prod_inplace(resize, 0) // {0,0,0,...}
-			console.log("AxesSet::drawDataset() resize", resize)
+			//console.log("AxesSet::drawDataset() resize", resize)
 			for(const [i,ar_flag] of this.autoresize.entries()){
 				//console.log("AxesSet::drawDataset() ar_flag", ar_flag)
 				if(ar_flag){
 					//console.log("AxesSet::drawDataset() this.extent_in_data_coords", this.extent_in_data_coords)
-					console.log("AxesSet::drawDataset() extent comps", this.extent_in_data_coords[i*2], this.extent_in_data_coords[i*2+1], data[i])
+					//console.log("AxesSet::drawDataset() extent comps", this.extent_in_data_coords[i*2], this.extent_in_data_coords[i*2+1], data[i])
 					if(!(this.extent_in_data_coords[i*2] <= data[i])){
-						console.log("AxesSet::drawDataset() data NOT less than lower bound of extent")
+						//console.log("AxesSet::drawDataset() data NOT less than lower bound of extent")
 						resize[i] = 1
 						this.extent_in_data_coords[i*2] = data[i]
 					}
 					if(!(data[i] <= this.extent_in_data_coords[i*2 + 1])){
-						console.log("AxesSet::drawDataset() data NOT greater than upper bound of extent")
+						//console.log("AxesSet::drawDataset() data NOT greater than upper bound of extent")
 						resize[i] = 1
 						this.extent_in_data_coords[i*2+1] = data[i]
 					}
-					console.log("AxesSet::drawDataset() resize", resize)
+					//console.log("AxesSet::drawDataset() resize", resize)
 					
 					// if our extent has no size, alter it slightly so it is bigger
 					// this avoids problems with transforms later
-					if (resize[i]==1 && (this.extent_in_data_coords[i*2] == this.extent_in_data_coords[i*2+1])){
-						console.log("AxesSet::drawDataset() Trying to prevent rank deficient transform of axis", i)
+					if (resize[i]==1 && !(this.extent_in_data_coords[i*2] != this.extent_in_data_coords[i*2+1])){
+						//console.log("AxesSet::drawDataset() Trying to prevent rank deficient transform of axis", i)
 						this.extent_in_data_coords[i*2] -= 50*Number.EPSILON
 						this.extent_in_data_coords[i*2+1] += 50*Number.EPSILON
 					}
@@ -1249,7 +1247,7 @@ class AxesSet{
 				this.updateWhenExtentChanged(resize)
 			}
 		
-			console.log("AxesSet::drawDataset() redraw flag", redraw_flag)
+			//console.log("AxesSet::drawDataset() redraw flag", redraw_flag)
 			
 			if(!redraw_flag){
 				this.data_area.drawData(dataset.name, data)
@@ -1261,7 +1259,7 @@ class AxesSet{
 	
 	attachDataArea(data_area){
 		if(data_area === null){
-			console.log("Warning: Attempting to attach null data_area to axes_set")
+			//console.log("Warning: Attempting to attach null data_area to axes_set")
 			return
 		}
 		this.data_area = data_area
@@ -1309,7 +1307,7 @@ class AxesSet{
 		if(containing_rect===null){
 			containing_rect = this.getDefaultContainingRect(this.axis_list.length)
 		}
-		console.log("containing_rect", containing_rect)
+		//console.log("containing_rect", containing_rect)
 		this.axis_list.push(new Axis({
 			index : this.axis_list.length,
 			ndim : this.data_area.dimensions.spatial,
@@ -1363,7 +1361,7 @@ class DataArea{
 			spatial: 2,
 		},
 	} = {}){
-		console.log("name", name)
+		//console.log("name", name)
 		
 		DataArea.n_instances++
 		this.name = (name===null) ? `data_area_${PlotArea.n_instances}` : name
@@ -1371,7 +1369,7 @@ class DataArea{
 		this.frame = ReferenceFrame.fromRect(parent_frame, this.rect_in_parent)
 		this.dimensions = dimensions
 		
-		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+		//console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
 		
 		this.svg = new SvgContainer(Svg.group(`group-${this.name}`, null, {}))		
 		
@@ -1494,26 +1492,26 @@ class DataArea{
 	}
 	
 	drawData(dataset_name, data, default_plot_type_artist = null){
-		console.log("DataArea::drawData", dataset_name, data, default_plot_type_artist, this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist))
+		//console.log("DataArea::drawData", dataset_name, data, default_plot_type_artist, this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist))
 		//this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawData(
 		//	this.applyDatasetTransform(dataset_name, data)
 		//)
 		
-		console.log(this.dataset_transforms.get(dataset_name))
+		//console.log(this.dataset_transforms.get(dataset_name))
 		
-		console.log(T.apply(
-			this.dataset_transforms.get(dataset_name), 
-			data
-		))
+		//console.log(T.apply(
+		//	this.dataset_transforms.get(dataset_name), 
+		//	data
+		//))
 		
-		console.log(
-			this.dataset_nonlinear_transforms.get(dataset_name).apply(
-				T.apply(
-					this.dataset_transforms.get(dataset_name), 
-					data
-				)
-			)
-		)
+		//console.log(
+		//	this.dataset_nonlinear_transforms.get(dataset_name).apply(
+		//		T.apply(
+		//			this.dataset_transforms.get(dataset_name), 
+		//			data
+		//		)
+		//	)
+		//)
 		
 		this.getDatasetPlotTypeArtist(dataset_name, default_plot_type_artist).drawDataWithTransform(
 			this.dataset_nonlinear_transforms.get(dataset_name).apply(
@@ -1532,6 +1530,7 @@ class DataArea{
 	}
 	
 	draw(){
+		return
 		this.svg.add(
 			"rect",
 			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),
@@ -1552,14 +1551,14 @@ class PlotArea{
 		parent_frame = null,
 		rect_in_parent = new R(0,0,1,1)
 	} = {}){
-		console.log("name", name)
+		//console.log("name", name)
 		
 		PlotArea.n_instances++
 		this.name = (name===null) ? `plot_area_${PlotArea.n_instances}` : name
 		this.rect_in_parent = rect_in_parent
 		this.frame = ReferenceFrame.fromRect(parent_frame, this.rect_in_parent)
 		
-		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+		//console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
 		
 		this.current_axes = null
 		this.current_dataset = null
@@ -1588,7 +1587,7 @@ class PlotArea{
 	
 	setDatasetPlotTypeArtist(dataset_name, plot_type_artist){
 		for(const axes_name of this.axes_for_dataset.get(dataset_name)){
-			console.log("PlotArea::setDatasetPlotTypeArtist()", axes_name)
+			//console.log("PlotArea::setDatasetPlotTypeArtist()", axes_name)
 			this.axes.get(axes_name).data_area.setDatasetPlotTypeArtist(dataset_name, plot_type_artist)
 		}
 	}
@@ -1610,7 +1609,7 @@ class PlotArea{
 	}
 	
 	setAsDataset(data, dataset_name = null){
-		console.log("PlotArea::setAsDataset()", data, dataset_name)
+		//console.log("PlotArea::setAsDataset()", data, dataset_name)
 		// Sets dataset `dataset_name` to only contain `data`
 		if(dataset_name === null){
 			dataset_name = this.current_dataset
@@ -1625,11 +1624,11 @@ class PlotArea{
 			// if axes.drawDataset(...) returns true, we need to redra
 			axes = this.axes.get(axes_name)
 			needs_redraw = axes.drawDataset(dataset)
-			console.log("PlotArea::setAsDataset ", axes, needs_redraw)
+			//console.log("PlotArea::setAsDataset ", axes, needs_redraw)
 			
 			if(needs_redraw){				
 				for(const redraw_dataset_name of axes.registered_datasets){
-					console.log("PlotArea::setAsDataset ", redraw_dataset_name)
+					//console.log("PlotArea::setAsDataset ", redraw_dataset_name)
 					dataset = this.datasets.get(redraw_dataset_name)
 					dataset.resetIterator(axes.name)
 					axes.drawDataset(dataset)
@@ -1686,16 +1685,17 @@ class PlotArea{
 	
 	draw(){
 		this.svg.add(
-			"rect",
-			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),
-			{stroke:"green"}
-		)
-		this.svg.add(
 			"text",
 			T.apply(this.frame.toRoot_transform, V.from(0.5,1)),
 			this.name,
 			{},
 			V.from(0.5,0)
+		)
+		return
+		this.svg.add(
+			"rect",
+			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),
+			{stroke:"green"}
 		)
 	}
 	
@@ -1751,7 +1751,7 @@ class PlotArea{
 	}
 	
 	appendAxesFromExtent(name, extent, axis_attrs = {}, data_area = null){
-		console.log(name, extent, data_area)
+		//console.log(name, extent, data_area)
 		if(data_area === null){
 			if (this.data_areas.size > 0){
 				data_area = this.data_areas.values().next().value
@@ -1792,6 +1792,18 @@ class PlotArea{
 }
 
 class Figure{
+
+	static get_font_size(scale, units){
+		switch (units){
+			case "rem":
+				return `${scale/20}rem`
+			case "em":
+				return `${scale/20}em`
+			default:
+				return `${scale/20}${units}`
+		}
+	}
+
 	constructor({
 		container,
 		shape = V.from(6,4),
@@ -1801,7 +1813,7 @@ class Figure{
 		
 		if (scale === null){
 			// Assign scale so the largest value in "shape" (after multiplication by scale) is 100
-			scale = 100/V.max(shape)
+			scale = 100/Math.abs(V.max(shape))
 		}
 		
 		this.container = container
@@ -1810,11 +1822,20 @@ class Figure{
 		this.f_rect_in_s = new R(0,scale*shape[1],scale*shape[0],-scale*shape[1])
 		
 		this.frame = ReferenceFrame.fromRect(null, this.f_rect_in_s)
-		console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
+		//console.log("this.frame.toRoot_transform", this.frame.toRoot_transform)
 		
 		this.plot_areas = new Map()
 		
-		this.svg = new SvgContainer(Svg.svg(shape, units, scale, {"style":`font-size:${Math.abs(V.min(V.div(shape,V.from(200, 100))))}${units};`}))
+		this.svg = new SvgContainer(
+			Svg.svg(
+				shape, 
+				units, 
+				scale, 
+				{
+					"style":`font-size:${Figure.get_font_size(scale,units)};`, // |min({dx,dy}/{200,100})|
+				}
+			)
+		)
 		
 		
 		
@@ -1825,6 +1846,7 @@ class Figure{
 	
 	
 	draw(){
+		return
 		this.svg.add(
 			"rect",
 			T.apply_block(this.frame.toRoot_transform, E.from(0,0,1,1)),

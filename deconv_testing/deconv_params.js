@@ -118,6 +118,7 @@ class TypeRegistry{
 TypeRegistry.add(
 	new DataType("integer", "A whole number between -inf and +inf", (o)=>((typeof(o)=="number") && Number.isInteger(o))),
 	new DataType("integer(1,inf)", "A whole number between 1 and +inf", (o)=>((typeof(o)=="number") && Number.isInteger(o) && (o>=1))),
+	new DataType("integer(0,inf)", "A whole number between 0 and +inf", (o)=>((typeof(o)=="number") && Number.isInteger(o) && (o>=0))),
 	new DataType("real", "A real number between -inf and +inf", (o)=>(typeof(o)=="number")),
 	new DataType("real(0,1)", "A real number in the interval (0, 1)", (o)=>((typeof(o)=="number")&&(0<o)&&(o<1))),
 	new DataType("bool", "A boolean that can be one of {true, false}", (o)=>(typeof(o)=="boolean")),
@@ -237,6 +238,16 @@ class ControlManager{
 		//console.log(param)
 		
 		switch(param.type_name){
+			case "integer(0,inf)":
+				input_type = "number"
+				ctl = ControlManager.create_control(
+					input_type,
+					{id:param.name, min:0, step:1, value:when_null(param.default_value,0), class:`param-${param.type_name}`}, 
+					(x)=>x.value, 
+					param.deserialiser, 
+					param.validate.bind(param)
+				)
+				break
 			case "integer(1,inf)":
 				input_type = "number"
 				ctl = ControlManager.create_control(
@@ -395,6 +406,13 @@ class CleanModifiedParameters{
 			Boolean, 
 			false
 		),
+		new Parameter(
+			"plot_update_interval", 
+			"How often to update plots (in number of iterations). Less frequent updates are faster, set to zero to never update plots.", 
+			"integer(0,inf)", 
+			Number, 
+			1
+		),
 	];
 	
 	constructor(parent_element){
@@ -479,6 +497,7 @@ class CleanModifiedParameters{
 			1E-2,
 			param_ctl_values.get("rms_frac_threshold"),//this.rms_frac_threshold_ctl.getValue(),
 			param_ctl_values.get("fabs_frac_threshold"),//this.fabs_frac_threshold_ctl.getValue()
+			param_ctl_values.get("plot_update_interval"),
 		)
 		
 		return invalid_params // need to return a list

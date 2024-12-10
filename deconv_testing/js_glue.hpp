@@ -35,8 +35,8 @@ std::span<R> image_as_blob(
 
 	std::string image_name = name + name_tag;
 
-	LOGV_DEBUG(image_name, a, input_pixel_format.channels_per_pixel);
-	LOGV_DEBUG(a.size());
+	//LOGV_DEBUG(image_name, a, input_pixel_format.channels_per_pixel);
+	//LOGV_DEBUG(a.size());
 	
 	
 	T min = a[0], max=a[0];
@@ -51,7 +51,7 @@ std::span<R> image_as_blob(
 	Storage::named_blobs[image_name] = std::vector<std::byte>(size_of_image_data);
 	std::vector<std::byte>& image_data = Storage::named_blobs[image_name];
 
-	LOGV_DEBUG(image_data.size(), size_of_image_data);
+	//LOGV_DEBUG(image_data.size(), size_of_image_data);
 	assert(image_data.size() == size_of_image_data);
 
 	switch (input_pixel_format.id) {
@@ -92,8 +92,8 @@ emscripten::val vector_as_JSImageData(
 		const std::vector<T>& a, 
 		const PixelFormat input_pixel_format=GreyscalePixelFormat
 	){
-	GET_LOGGER;
-	LOGV_DEBUG(a.data());
+	//GET_LOGGER;
+	//LOGV_DEBUG(a.data());
 
 	std::span<uint8_t> image_data = image_as_blob<uint8_t,T>(name, a, input_pixel_format);
 	return emscripten::val(emscripten::typed_memory_view(image_data.size(), image_data.data()));

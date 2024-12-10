@@ -317,7 +317,8 @@ void set_deconvolver_parameters(
 		bool _add_residual,
 		double _noise_std,
 		double _rms_frac_threshold,
-		double _fabs_frac_threshold
+		double _fabs_frac_threshold,
+		size_t _plot_update_interval
 	){
 	CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
 	
@@ -334,6 +335,7 @@ void set_deconvolver_parameters(
 	deconvolver.noise_std = _noise_std;
 	deconvolver.rms_frac_threshold = _rms_frac_threshold;
 	deconvolver.fabs_frac_threshold = _fabs_frac_threshold;
+	deconvolver.plot_update_interval = _plot_update_interval;
 	
 	// Update other deconvolver attributes that depend on these params
 	deconvolver.fabs_record.resize(_n_iter, NAN); 

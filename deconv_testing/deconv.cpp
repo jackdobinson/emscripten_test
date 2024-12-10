@@ -1,5 +1,7 @@
 #include "deconv.hpp"
 
+
+
 // TODO:
 // * [DONE] Write code to center PSF on brightest pixel/center of brightness
 // * Add hooks/callbacks so I can update things after each iteration/at specific points in processing
@@ -20,120 +22,308 @@ using namespace emscripten;
 //   data. JS (or here) has functions that display raw data. I associate raw data
 //   handles with display functions on JS side. C++ side updates raw data, JS side
 //   periodically calls display functions.
-EM_JS(void, send_to_js_canvas, (void* ptr, int size, int width, int height), {
-	console.log("EM_JS: Sending image to canvas");
-	console.log(ptr, size, width, height);
-	let im_data = new ImageData(new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, size), width, height);
-	scratch_canvas.width = width;
-	scratch_canvas.height = height;
-	scratch_canvas_ctx.imageSmoothingEnabled = false;
-	scratch_canvas_ctx.putImageData(im_data, 0, 0);
-});
+
 
 
 EM_JS(void, send_to_named_js_canvas, (const char* name, void* ptr, int size, int width, int height), {
 	let canvas_id = UTF8ToString(name);
-	console.log("EM_JS: Sending image to canvas ", canvas_id);
-	console.log(ptr, size, width, height);
+	//console.log("EM_JS: Sending image to canvas ", canvas_id);
+	//console.log(ptr, size, width, height);
 	let named_canvas = document.getElementById(canvas_id);
-	console.log("EM_JS: named canvas", named_canvas);
+	//console.log("EM_JS: named canvas", named_canvas);
 	let im_data = new ImageData(new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, size), width, height);
-	console.log("EM_JS: got image data");
+	//console.log("EM_JS: got image data");
 	named_canvas.width = width;
 	named_canvas.height = height;
-	console.log("EM_JS: getting canvas context");
+	//console.log("EM_JS: getting canvas context");
 	let named_canvas_ctx = named_canvas.getContext("2d");
 	named_canvas_ctx.imageSmoothingEnabled = false;
 	named_canvas_ctx.putImageData(im_data, 0, 0);
-	console.log("EM_JS: Image data written");
+	//console.log("EM_JS: Image data written");
 });
 
-EM_JS(void, update_js_plot, (const char* name, void* ptr, int size), {
-	name = UTF8ToString(name);
-	console.log("EM_JS: update_js_plot");
-	if(plot_name_map === undefined){
-		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
-		return;
-	}
-	if( !plot_name_map.has(name)){
-		console.log("EM_JS: plot name not found", name);
-		return;
-	}
-	plot_name_map.get(name).update(ptr, size);
-});
 
-EM_JS(void, js_plot_point, (const char* name, double x, double y), {
-	name = UTF8ToString(name);
-	console.log("EM_JS: js_plot_point", x, y);
-	if(plot_name_map === undefined){
-		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
-		return;
-	}
-	if(!plot_name_map.has(name)){
-		console.log("EM_JS: plot name not found", name);
-		console.log(plot_name_map);
-		return;
-	}
-	plot_name_map.get(name).addDataToDataset(null,x,y);
-});
-
-EM_JS(void, js_plot_point_to_dataset, (const char* plot_name, const char* dataset_name, double x, double y, bool clear=false), {
-	plot_name = UTF8ToString(plot_name);
+EM_JS(void, js_set_dataset_cpp_array_cache, (const char* dataset_name, const void* ptr, int capacity), {
 	dataset_name = UTF8ToString(dataset_name);
-	console.log("EM_JS: js_plot_point", x, y);
-	if(plot_name_map === undefined){
-		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
-		return;
-	}
-	if(!plot_name_map.has(plot_name)){
-		console.log("EM_JS: plot name not found", plot_name);
-		console.log(plot_name_map);
-		return;
-	}
 	
-	let plot = plot_name_map.get(plot_name);
-	if(clear){
-		console.log("clearing plot", plot_name);
-		plot.clear();
-	}
-	plot.addDataToDataset(dataset_name,x,y);
-});
-
-EM_JS(void, js_set_data_of_dataset, (const char* plot_name, const char* dataset_name, void* x_ptr, int x_size, void* y_ptr, int y_size, bool clear=false), {
-	plot_name = UTF8ToString(plot_name);
-	dataset_name = UTF8ToString(dataset_name);
-	console.log("EM_JS: js_set_data_of_dataset");
-	if(plot_name_map === undefined){
-		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
-		return;
-	}
-	if(!plot_name_map.has(plot_name)){
-		console.log("EM_JS: plot name not found", plot_name);
-		console.log(plot_name_map);
-		return;
-	}
-	
-	let plot = plot_name_map.get(plot_name);
-	if(clear){
-		console.log("clearing plot", plot_name);
-		plot.clear();
-	}
-	//let x_points = new Float64Array(Module.HEAPF64, x_ptr, x_size);
-	//let y_points = new Uint32Array(Module.HEAPU32, y_ptr,  y_size);
-	
-	let x_points = Module.HEAPF64.slice(x_ptr/8, x_ptr/8+x_size);
-	let y_points = Module.HEAPU32.slice(y_ptr/4, y_ptr/4+y_size);
-	
-	
-	console.log(x_points);
-	console.log(y_points);
-	
-	plot.setDataAsDataset(
-		dataset_name,
-		x_points,
-		y_points
+	dataset_cpp_array_cache.set(
+		dataset_name, 
+		Module.HEAPF64.subarray(ptr/8, ptr/8 + capacity)
 	);
 });
+
+EM_JS(void, js_plot_point_from_cpp_array_cache, (const char* plot_name, const char* dataset_name, int idx_start, int idx_end, bool clear=false), {
+	plot_name = UTF8ToString(plot_name);
+	dataset_name = UTF8ToString(dataset_name);
+	//console.log("EM_JS: js_plot_point_from_cpp_array_cache");
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if(!plot_name_map.has(plot_name)){
+		console.log("EM_JS: plot name not found", plot_name);
+		//console.log(plot_name_map);
+		return;
+	}
+	
+	let plot = plot_name_map.get(plot_name);
+	if(clear){
+		//console.log("clearing plot", plot_name);
+		plot.clear();
+	}
+	
+	
+	let array_cache = dataset_cpp_array_cache.get(dataset_name).subarray(idx_start, idx_end);
+	//console.log(idx_start, idx_end);
+	//console.log(array_cache);
+	
+	//plot.addDataToDataset(dataset_name,array_cache);
+	plot.appendToDataset(array_cache, dataset_name)
+});
+
+EM_JS(void, js_plot_set_data_from_cpp_array_cache, (const char* plot_name, const char* dataset_name, int size, int n_dimensions, bool clear=false), {
+	plot_name = UTF8ToString(plot_name);
+	dataset_name = UTF8ToString(dataset_name);
+	//console.log("EM_JS: js_plot_set_data_from_cpp_array_cache");
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if(!plot_name_map.has(plot_name)){
+		console.log("EM_JS: plot name not found", plot_name);
+		//console.log(plot_name_map);
+		return;
+	}
+	
+	let plot = plot_name_map.get(plot_name);
+	if(clear){
+		//console.log("clearing plot", plot_name);
+		plot.clear();
+	}
+	
+	let array_cache = dataset_cpp_array_cache.get(dataset_name).subarray(0,size);
+	
+	plot.setAsDataset(
+		V.toBlockArray(array_cache, n_dimensions),
+		dataset_name
+	);
+});
+
+
+#include <initializer_list>
+
+template<class T>
+struct PointStorage{
+	constexpr static size_t initial_capacity = 1024;
+
+	using value_t = T;
+	using callback_t = void(*)(const PointStorage<T>&, const int);
+	
+	size_t capacity;
+	size_t m_size;
+	value_t* ptr;
+	bool do_fill = false;
+	value_t fill_value;
+	
+	int userdata_id;
+	callback_t after_reallocate_callback = nullptr;
+	
+	PointStorage(
+			size_t _capacity = initial_capacity,
+			int _userdata_id = -1
+		) 
+	: capacity(_capacity)
+	, userdata_id(_userdata_id)
+	{
+		ptr = new value_t[capacity];
+		m_size = 0;
+	}
+	
+	PointStorage(
+			std::initializer_list<value_t> init_list
+		) 
+	: userdata_id(-1)
+	{
+		capacity = initial_capacity;
+		while(capacity < init_list.size()){
+			capacity *= 2;
+		}
+		ptr = new value_t[capacity];
+		m_size=0;
+		for(auto& item : init_list){
+			ptr[m_size] = item;
+			++m_size;
+		}
+	}
+	
+	template<class ...Ts>
+	void assign_vectors_zipped(Ts ...args){
+		size_t n_dims = sizeof...(Ts);
+		size_t new_size = (args.size() + ...);
+		size_t new_capacity = capacity;
+		size_t dim_size = new_size/n_dims;
+		
+		
+		while(new_capacity < new_size){
+			new_capacity *= 2;
+		}
+		
+		reallocate(new_capacity);
+		
+		size_t j;
+		for(size_t i=0;i<dim_size;++i){
+			j = 0;
+			([&]{ // apply function to each element of parameter pack
+				ptr[n_dims*i + j] = args[i];
+				++j;
+			}(), ...);
+		}
+		m_size = new_size;
+	}
+	void set_fill(const value_t& _fill_value, bool _do_fill=true){
+		fill_value = _fill_value;
+		do_fill = _do_fill;
+	}
+	void fill(bool include_set_values = true){
+		if(!do_fill){return;}
+		
+		size_t i = (include_set_values) ? 0 : size();
+		for(; i<capacity; ++i){
+			ptr[i] = fill_value;
+		}
+	}
+	void reallocate_to_fit(size_t required_capacity){
+		size_t new_capacity = capacity;
+		while(new_capacity < required_capacity){
+			new_capacity *= 2;
+		}
+		reallocate(new_capacity);
+	}
+	void reallocate(size_t new_capacity){
+		value_t *temp = new value_t[new_capacity];
+		
+		std::memcpy(temp, ptr, size());
+		
+		delete[] ptr;
+		
+		ptr = temp;
+		capacity = new_capacity;
+		
+		fill();
+		
+		if(after_reallocate_callback != nullptr){
+			after_reallocate_callback(*this, userdata_id);
+		}
+	}
+	void push_back(const value_t& v){
+		if(size() == capacity){
+			reallocate(2*capacity);
+		}
+		ptr[size()] = v;
+		++m_size;
+	}
+	value_t* data() const {
+		return ptr;
+	}
+	size_t size() const {
+		return m_size;
+	}
+	value_t& operator[](size_t idx){
+		 return ptr[idx]; 
+	}
+	const value_t& operator[](size_t idx) const {
+		return ptr[idx]; 
+	}
+	value_t* begin(){
+		return ptr;
+	}
+	value_t* end(){
+		return ptr+size();
+	}
+};
+
+std::map<std::string, PointStorage<double>> dataset_points;
+std::map<std::string, int> userdata_ids;
+std::map<int, std::string> dataset_names;
+
+template<class T>
+void update_cpp_array_cache_on_reallocate(const PointStorage<T>& points, const int userdata_id){
+	const char* dataset_name = dataset_names[userdata_id].c_str();
+	js_set_dataset_cpp_array_cache(dataset_name, points.data(), points.capacity); //(const char* dataset_name, void* ptr, int capacity)
+}
+
+PointStorage<double>& get_dataset_point_storage(const std::string& dataset_name){
+	PointStorage<double>* points ;
+	if(!dataset_points.contains(dataset_name)){
+		dataset_points[dataset_name] = PointStorage<double>();
+		points = &dataset_points[dataset_name];
+		
+		userdata_ids.try_emplace(dataset_name, dataset_names.size());
+		dataset_names.try_emplace(userdata_ids[dataset_name], dataset_name);
+		points->userdata_id = userdata_ids[dataset_name];
+		
+		points->after_reallocate_callback = update_cpp_array_cache_on_reallocate;
+		update_cpp_array_cache_on_reallocate(*points, userdata_ids[dataset_name]);
+	}
+	return dataset_points[dataset_name];
+}
+
+void send_data_to_plot(
+		const std::string plot_name, 
+		const std::string dataset_name, 
+		double x, 
+		double y
+	){
+	
+	PointStorage<double>& points = get_dataset_point_storage(dataset_name);
+	
+	points.push_back(x);
+	points.push_back(y);
+	
+	js_plot_point_from_cpp_array_cache(plot_name.c_str(), dataset_name.c_str(), points.size()-2, points.size());
+}
+
+
+void send_data_to_plot(
+		const std::string plot_name, 
+		const std::string dataset_name, 
+		const std::vector<double>& values,
+		size_t start_idx,
+		size_t end_idx
+	){
+	//GET_LOGGER;
+	PointStorage<double>& points = get_dataset_point_storage(dataset_name);
+	
+	for(size_t i=start_idx; i<end_idx; ++i){
+		//LOGV_DEBUG(i, values[i]);
+		
+		points.push_back(i);
+		points.push_back(values[i]);
+		js_plot_point_from_cpp_array_cache(plot_name.c_str(), dataset_name.c_str(), points.size()-2, points.size());
+	}
+	
+	
+}
+
+void send_data_to_plot(
+		const std::string plot_name, 
+		const std::string dataset_name, 
+		const std::vector<double>& x, 
+		const std::vector<uint32_t>& y
+	){
+	
+	PointStorage<double>& points = get_dataset_point_storage(dataset_name);
+	
+	
+	points.assign_vectors_zipped(x,y);
+	
+	js_plot_set_data_from_cpp_array_cache(plot_name.c_str(), dataset_name.c_str(), points.size(), 2, true);
+}
+
+
+
+
+
 
 // TODO: 
 // * rewrite this to be easier to integrate with the JS side of things
@@ -164,6 +354,7 @@ CleanModifiedAlgorithm::CleanModifiedAlgorithm(
 		noise_std(_noise_std), 
 		rms_frac_threshold(_rms_frac_threshold), 
 		fabs_frac_threshold(_fabs_frac_threshold),
+		plot_update_interval(0),
 		data_size(0),
 		data_shape(),
 		residual_data(0), 
@@ -235,19 +426,6 @@ void CleanModifiedAlgorithm::_get_padded_psf(
 	du::set_at_mask(padded_psf_data, psf_nan_mask, 0.0);
 	du::multiply_inplace(padded_psf_data, 1.0/du::sum(padded_psf_data));
 
-
-	// TESTING CENTERING OF NON_CENTERED PSF
-	//du::shift_inplace(padded_psf_data, data_shape, std::vector<size_t>({100,200}));
-	//const std::span<std::byte>& temp1 = image_as_blob("padded_psf_data", padded_psf_data);
-	//send_to_named_js_canvas(
-	//	std::string("uncentered-psf-canvas").c_str(), 
-	//	temp1.data(), 
-	//	temp1.size(), 
-	//	data_shape[0], 
-	//	data_shape[1]
-	//);
-
-
 	std::vector<int> center_offset_nd_idx(data_shape.size(), 0);
 	
 	if(centering_mode == ""){
@@ -282,17 +460,6 @@ void CleanModifiedAlgorithm::_get_padded_psf(
 		);
 	}
 
-	const std::span<std::byte>& temp2 = image_as_blob("padded_psf_data", padded_psf_data);
-	send_to_named_js_canvas(
-		std::string("adjusted-psf-canvas").c_str(), 
-		temp2.data(), 
-		temp2.size(), 
-		data_shape[0], 
-		data_shape[1]
-	);
-	
-	
-	
 	LOG_DEBUG("Adjusted padded_psf_data for convolution centering");
 	// Re-center the padded_psf_data so that the convolution in "run()" 
 	// is performed in the correct way.
@@ -303,28 +470,7 @@ void CleanModifiedAlgorithm::_get_padded_psf(
 
 	// Because of how fftw works, need to align on 0th pixel
 	// we DO NOT want the PSF to be centered in it's frame
-	//delta_f[delta_f.size() - du::idx_max(padded_psf_data)] = 1;
-	//padded_psf_data = du::real_part(ifft(du::multiply(fft(padded_psf_data), fft(delta_f))));
 	du::shift_inplace(padded_psf_data, padded_psf_data.size()/2);
-
-	/* DEBUGGING write out PSF for testing
-	std::vector<std::byte> temp = image_as_bytes(padded_psf_data);
-	//std::vector<std::byte> temp = image_as_bytes(delta_f);
-	LOGV_DEBUG(temp);
-	//for(auto& item : temp){
-	//	std::cout << item << " ";
-	//}
-	EM_ASM({(
-		console.log("TESTING EM_ASM");
-		console.log($0, $1, $2, $3);
-		let im_data = new ImageData(new Uint8ClampedArray(Module.HEAPU8.buffer, $0, $1), $2, $3);
-		scratch_canvas.width = $2;
-		scratch_canvas.height = $3;
-		scratch_canvas_ctx.imageSmoothingEnabled = false;
-		console.log(`${scratch_canvas_ctx.imageSmoothingEnabled}`);
-		scratch_canvas_ctx.putImageData(im_data, 0, 0);
-	)}, temp.data(), temp.size(), data_shape[0], data_shape[1]);
-	*/
 	
 }
 
@@ -467,15 +613,30 @@ void calculate_histogram(std::vector<double>& temp_data, std::vector<double>& hi
 	}
 }
 
-void CleanModifiedAlgorithm::doIter(
+
+// Helper Function
+template <class T>
+void send_to_canvas(const T& data, const std::vector<size_t>& data_shape, const std::string& canvas_name){
+	const std::span<std::byte>& temp2 = image_as_blob(canvas_name+"_data_inprogress", data);
+	send_to_named_js_canvas(
+		(canvas_name+"-canvas").c_str(), 
+		temp2.data(), 
+		temp2.size(), 
+		data_shape[0], 
+		data_shape[1]
+	);
+}
+
+bool CleanModifiedAlgorithm::doIter(
 		size_t i
 	){
+	bool iter_continue = true;
+	
 	GET_LOGGER;
 	
 	LOGV_DEBUG(i);
-		
 	
-
+	
 	_calc_pixel_threshold();
 	
 	_select_update_pixels();
@@ -486,59 +647,64 @@ void CleanModifiedAlgorithm::doIter(
 
 	current_convolved = du::real_part(ifft(du::multiply(selected_px_fft, psf_fft)));
 
-	if (!(i%1)){
-		LOGV_DEBUG(i);
-		du::write_as_image(_sprintf("./plots/%components_%.pgm", tag, i), components_data, data_shape);
-		du::write_as_image(_sprintf("./plots/%residual_%.pgm", tag, i), residual_data, data_shape);
-		du::write_as_image(_sprintf("./plots/%selected_pixels_%.pgm", tag, i), selected_pixels, data_shape); 
-		//du::write_as_image(_sprintf("./plots/%selected_px_fft_real_%.pgm", tag, i), du::real_part(selected_px_fft), data_shape); 
-		//du::write_as_image(_sprintf("./plots/%selected_px_fft_imag_%.pgm", tag, i), du::imag_part(selected_px_fft), data_shape); 
-		//du::write_as_image(_sprintf("./plots/%selected_pixels_fft_ifft_%.pgm", tag, i), du::real_part(ifft_data_shape(selected_px_fft)), data_shape); 
-		du::write_as_image(_sprintf("./plots/%current_convolved_%.pgm", tag, i), current_convolved, data_shape); 
-		
-		const std::span<std::byte>& temp = image_as_blob(std::string(BLOB_ID_COMPONENTS), components_data);
-		send_to_js_canvas(temp.data(), temp.size(), data_shape[0], data_shape[1]);
-	}
-
-	//LOGV_DEBUG(du::sum(current_convolved));
-	//LOGV_DEBUG(du::sum(components_data));
-
 	du::subtract_inplace(residual_data, current_convolved);
-	//du::add_inplace(components_data, current_convolved);
 	du::add_inplace(components_data, selected_pixels);
 
-
-	// NOTE: Plotting preparation etc. goes below this line
+	
 	
 	fabs_record[i] = du::max(du::apply(residual_data, abs ));
 	rms_record[i] = sqrt(du::sum(du::apply(residual_data, du::square ))/residual_data.size());
 	threshold_record[i] = px_threshold;
 	
-	//LOGV_DEBUG(fabs_record[i]);
-	//LOGV_DEBUG(rms_record[i]);
+	// Check stoping criteria
+	if( fabs_record[i] < fabs_record[0]*fabs_frac_threshold){
+		iter_continue = false;
+		LOG_INFO("Deconvolution finished at % iterations. Absolute value of brightest pixel % is lower than threshold value %.", i,fabs_record[i], fabs_record[0]*fabs_frac_threshold);
+	}
+	if( rms_record[i] < rms_record[0]*rms_frac_threshold){
+		iter_continue = false;
+		LOG_INFO("Deconvolution finished at % iterations. Root mean square of residual % is lower than threshold value %.", i,rms_record[i], rms_record[0]*rms_frac_threshold);
+	}
 	
-	// magic values here for now
-	//update_js_plot("fabs_record", fabs_record.data(), fabs_record.size());
-	js_plot_point_to_dataset("stopping_criteria", "fabs_record", i, fabs_record[i]);
-	js_plot_point_to_dataset("stopping_criteria", "rms_record", i, rms_record[i]);
-	js_plot_point_to_dataset("stopping_criteria", "threshold_record", i, threshold_record[i]);
+	if ((plot_update_interval > 0) && (!(i%plot_update_interval) || !iter_continue)){
+		// NOTE: Plotting preparation etc. goes inside this if statement
+		
+		send_data_to_plot("stopping_criteria", "fabs_record", fabs_record, i - plot_update_interval, i);
+		send_data_to_plot("stopping_criteria", "rms_record", rms_record, i - plot_update_interval, i);
+		send_data_to_plot("stopping_criteria", "threshold_record", threshold_record, i - plot_update_interval, i);
+		
+		
+		temp_data = residual_data;
+		calculate_histogram(temp_data, histogram_edges, histogram_counts);
 	
-	temp_data = residual_data;
-	calculate_histogram(temp_data, histogram_edges, histogram_counts);
-	//for(size_t j=0;j < histogram_edges.size(); ++j){
-	//	js_plot_point_to_dataset("residual_histogram", "residual_histogram_data", histogram_edges[j], histogram_counts[j], j==0);
-	//}
-	js_set_data_of_dataset("residual_histogram", "residual_histogram_data", histogram_edges.data(), histogram_edges.size(), histogram_counts.data(), histogram_counts.size());
-	js_plot_point_to_dataset("residual_histogram", "threshold_line_data", threshold_record[i], 0);
+		send_data_to_plot("residual_histogram", "residual_histogram_data", histogram_edges, histogram_counts);
+		send_data_to_plot("residual_histogram", "threshold_line_data", threshold_record[i], 0);
+		
+		
+		temp_data = components_data;
+		calculate_histogram(temp_data, histogram_edges, histogram_counts);
+		send_data_to_plot("component_histogram", "component_data", histogram_edges, histogram_counts);
+		
+		temp_data = selected_pixels;
+		calculate_histogram(temp_data, histogram_edges, histogram_counts);
+		send_data_to_plot("selected_pixels_histogram", "selected_pixels_data", histogram_edges, histogram_counts);
+		
+		temp_data = current_convolved;
+		calculate_histogram(temp_data, histogram_edges, histogram_counts);
+		send_data_to_plot("current_convolved_histogram", "current_convolved_data", histogram_edges, histogram_counts);
+		
+		send_to_canvas(residual_data, data_shape, "residual");
+		send_to_canvas(selected_pixels, data_shape, "selected-pixels");
+		send_to_canvas(current_convolved, data_shape, "current-convolved");
+		send_to_canvas(components_data, data_shape, "components");
+	}
 	
-	temp_data = components_data;
-	calculate_histogram(temp_data, histogram_edges, histogram_counts);
-	//for(size_t j=0;j < histogram_edges.size(); ++j){
-	//	js_plot_point_to_dataset("component_histogram", "component_data", histogram_edges[j], histogram_counts[j], j==0);
-	//}
-	js_set_data_of_dataset("component_histogram", "component_data", histogram_edges.data(), histogram_edges.size(), histogram_counts.data(), histogram_counts.size());
+	
+	
+	
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
+	return iter_continue;
 }
 
 void CleanModifiedAlgorithm::prepare_observations(
@@ -614,9 +780,11 @@ void CleanModifiedAlgorithm::run(){
 	GET_LOGGER;
 	LOG_DEBUG("Starting deconvolution n_iter %", n_iter);
 
+	bool iter_continue = true;
+
 	timer::start();
-	for(size_t i=0; i<n_iter; ++i){
-		doIter(i);
+	for(size_t i=0; i<n_iter && iter_continue; ++i){
+		iter_continue = doIter(i);
 	}
 
 	LOGV_DEBUG(data_shape);

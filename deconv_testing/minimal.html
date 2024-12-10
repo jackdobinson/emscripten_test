@@ -25,7 +25,7 @@
 			</progress>  
 		</div>
 
-		<div class="emscripten-hide-boilerplate" style="display:block;width=100%">
+		<div class="emscripten-hide-boilerplate" style="display:none;width=100%">
 			<canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 			<hr/>
 		
@@ -45,6 +45,8 @@
 		</div>
 
 
+		<hr>
+		<h4>Input Images</h4>
 		<div class="emscripten_border">
 
 			<div class="h-flow">
@@ -80,29 +82,68 @@
 			</div>
 
 		</div>
-
+		
+		<hr>
+		<h4>Deconvolution Parameters</h4>
 		<div id="parameter-container"></div>
 
 		<button class="run-button" id="run_deconv" type="button">Run Deconvolution</button>
-
-		<!--<canvas id="uncentered-psf-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>-->
-		<canvas id="adjusted-psf-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 		
-		<div id="progress-plots" class="h-flow">
-			
-		</div>
+		<hr>
+		<div>
+			<details id="progress-plot-details" class="progress-plot-details">
+				<summary><h4 style="display:inline;">Progress Plots</h4></summary>
+				<!--
+				<canvas id="uncentered-psf-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+				<canvas id="adjusted-psf-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+				-->
+				
 
+			</details>
+			<div id="plot-container-1">
+				<div class="h-flow">
+					<div class="v-flow">
+						<div class="item">
+							<p>Residual</p>
+							<canvas id="residual-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+						</div>
+						<div class="item">
+							<p>Selected Pixels</p>
+							<canvas id="selected-pixels-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+						</div>
+					</div>
+					<div class="v-flow">
+						<div class="item">
+							<p>Current Convolved</p>
+							<canvas id="current-convolved-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+						</div>
+						<div class="item">
+							<p>Current Components</p>
+							<canvas id="components-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+						</div>
+					</div>
+					
+					<div id="progress-plots" class="v-flow">
+						
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<hr>
+		
+		<h4>Results</h4>
 		<div id="results" class="h-flow">
 			<div class="item">
 				<canvas id="clean_map_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-				<button class="download-result" id="download-clean-map-button" type="button">Download .TIFF</button>
+				<button class="download-result" id="download-clean-map-button" type="button">Download Clean Map .TIFF</button>
 			</div>
 			<div class="item">
 				<canvas id="residual_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-				<button class="download-result" id="download-residual-button" type="button">Download .TIFF</button>
+				<button class="download-result" id="download-residual-button" type="button">Download Residual .TIFF</button>
 			</div>
 		</div>
-
+		
 		<hr/>
 			<textarea class="emscripten" id="output" rows="8"></textarea>
 		<hr>

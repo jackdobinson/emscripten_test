@@ -5,6 +5,20 @@ class V{
 	static zero = Float64Array.from([0,0])
 	static one =  Float64Array.from([1,1])
 	
+	static toBlockArray(v, ndim=2){
+		let n_ndim_blocks = (v.length / ndim >>0)
+		if(n_ndim_blocks*ndim < v.length){
+			throw Error(`Must have v.length ${v.length} divisible by ndim ${ndim} if we want to manipulate v into a block array.`)
+		}
+		
+		let a = new Array(n_ndim_blocks)
+		
+		for(let i=0; i<n_ndim_blocks;i++){
+			a[i] = v.subarray(ndim*i, ndim*(i+1))
+		}
+		return a
+	}
+	
 	static any_nan(v){
 		for(const item of v){
 			if (isNaN(item)){

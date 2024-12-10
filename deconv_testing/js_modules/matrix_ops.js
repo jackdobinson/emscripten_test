@@ -77,7 +77,7 @@ class M{
 				a.set_rc_at(r,c, args[c][r])
 			}
 		}
-		console.log(a)
+		//console.log(a)
 		return a
 	}
 	
