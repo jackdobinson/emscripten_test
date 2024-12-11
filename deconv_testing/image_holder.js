@@ -10,9 +10,10 @@ function getImageDataFromResult(get_result, arg_list, image_width, image_height)
 
 
 class ImageHolder {
-	constructor(target_canvas, html_element, event_name){
+	constructor(target_canvas, html_element, event_name, after_event_fn=()=>{}){
 		this.target_canvas = target_canvas
 		this.target_canvas_ctx = this.target_canvas.getContext("2d")
+		this.after_event_fn = after_event_fn
 		this.file=null
 		this.name=null
 		this.im_w=null
@@ -77,23 +78,39 @@ class ImageHolder {
 		if (e.target.files.length != 1) {
 			console.log("ERROR: Selected multiple files, only want a single file")
 		}
+		
+		// update label show "LOADING..."
+		for (const label of e.target.labels){
+			let inner_html = label
+			while (inner_html.firstElementChild !== null){
+				inner_html = inner_html.firstElementChild
+			}
+			console.log(inner_html)
+			inner_html.innerText= "LOADING..."
+		}
+
 		this.discardPreviousImage()
 
 		this.file = e.target.files[0]
-
-		// update label to be the new file name
-		for (const label of e.target.labels){
-			let target = label
-			while (target.firstElementChild !== null){
-				target = target.firstElementChild
-			}
-			target.innerText=this.file.name
-		}
+		let filename = this.file.name
 
 		await this.loadImageToModule()
 
 		this.getImageDimensions()
 		this.displayImage()
+		
+		
+		// update label to be the new file name
+		for (const label of e.target.labels){
+			let inner_html = label
+			while (inner_html.firstElementChild !== null){
+				inner_html = inner_html.firstElementChild
+			}
+			console.log(inner_html)
+			inner_html.innerText=filename
+		}
+		
+		this.after_event_fn()
 	}
 }
 

@@ -27,12 +27,40 @@ let download_residual_button = document.getElementById("download-residual-button
 let run_deconv_button = document.getElementById("run_deconv")
 let n_max_iter_field = document.getElementById("n_max_iter")
 
-let sci_image_holder = new ImageHolder(sci_canvas, sci_file_picker, "change")
-let psf_image_holder = new ImageHolder(psf_canvas, psf_file_picker, "change")
+
+let deconv_status_mgr = new StatusKVManager([
+	["Science Observation Uploaded", false, {"is-good":false}],
+	["PSF Observation Uploaded", false, {"is-good":false}],
+	["Parameters Validated", false, {"is-good":false}],
+	["Deconvolution Running", false, {"is-good":undefined}],
+	["Deconvolution Iteration", "No Previous Run", {"is-good":undefined}],
+	["Last Plot Update Iteration", "No Previous Run", {"is-good":undefined}],
+	["Results Available", false, {"is-good":false}]
+])
+deconv_status_mgr.addTo(document.getElementById("status-container"))
+
+
+let sci_image_holder = new ImageHolder(
+	sci_canvas, 
+	sci_file_picker, 
+	"change",
+	()=>{
+		deconv_status_mgr.set("Science Observation Uploaded", true, {"is-good":true})
+	}
+)
+let psf_image_holder = new ImageHolder(
+	psf_canvas, 
+	psf_file_picker, 
+	"change",
+	()=>{
+		deconv_status_mgr.set("PSF Observation Uploaded", true, {"is-good":true})
+	}
+)
 let deconv_clean_map = null
 let deconv_residual = null
 
-let clean_modified_params = new CleanModifiedParameters(document.getElementById("parameter-container"))
+let clean_modified_params = new CleanModifiedParameters(document.getElementById("param-container"))
+
 
 let progress_plot_details = document.getElementById("progress-plot-details")
 let plot_container_1 = document.getElementById("plot-container-1")
@@ -222,7 +250,8 @@ download_clean_map_button.addEventListener(
 			return fn+"deconvolved_clean_map" + ext
 		},
 		"deconv.clean_map", 
-		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
+		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name),
+		()=>{if(!deconv_complete){alert("Deconvolution not completed, cannot download results");} return deconv_complete;},
 	)
 )
 
@@ -243,7 +272,8 @@ download_residual_button.addEventListener(
 			return fn+"deconvolved_residual"+ext
 		},
 		"deconv.residual", 
-		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name)
+		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name),
+		()=>{if(!deconv_complete){alert("Deconvolution not completed, cannot download results");} return deconv_complete;},
 	)
 )
 
@@ -260,10 +290,9 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		}
 		
 		deconv_complete = false
+		deconv_status_mgr.set("Deconvolution Running", true)
+		deconv_status_mgr.set("Results Available", false, {"is-good":false})
 		console.log("Creating deconvolver")
-		//let n_max_iter = parseInt(n_max_iter_field.value, 10)
-		
-		
 		
 		await Module.create_deconvolver(deconv_type, deconv_name)
 
@@ -273,26 +302,6 @@ run_deconv_button.addEventListener("click", async (e)=>{
 			alert(`ERROR: Could not run deconvolution.\n\nThe following parameters are invalid and need to be corrected:\n\t${invalid_params.join("\n\t")}`)
 			return;
 		}
-		
-		/*
-		// Automatically size the plot for the expected number of iterations
-		plot_name_map.get("fabs_record").current_data_area.setExtent(
-			E.from(
-				0,
-				clean_modified_params.valueOf("n_iter"),
-				Math.log10(clean_modified_params.valueOf("fabs_frac_threshold")),
-				0
-			)
-		)
-		plot_name_map.get("rms_record").current_data_area.setExtent(
-			E.from(
-				0,
-				clean_modified_params.valueOf("n_iter"),
-				Math.log10(clean_modified_params.valueOf("rms_frac_threshold")),
-				0
-			)
-		)
-		*/
 		
 		console.log("run_deconv_button.addEventListener::click", Math.log10(clean_modified_params.valueOf("fabs_frac_threshold")))
 
@@ -311,6 +320,7 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		await Module.run_deconvolver(deconv_type, deconv_name)
 		
 		deconv_complete = true
+		deconv_status_mgr.set("Deconvolution Running", false)
 		
 		let width = sci_image_holder.im_w
 		let height = sci_image_holder.im_h
@@ -347,6 +357,7 @@ run_deconv_button.addEventListener("click", async (e)=>{
 		residual_canvas.getContext("2d").putImageData(deconv_residual,0,0)	
 
 		console.log("Results should be displayed")
+		deconv_status_mgr.set("Results Available", true, {"is-good":true})
 	}
 )
 

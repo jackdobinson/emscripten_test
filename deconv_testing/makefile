@@ -37,6 +37,7 @@ comma:= ,
 
 #CXXFLAGS=-O3 $(LDIRS) $(IDIRS) -lcfitsio -lfftw3 -lm -lnetpbm -std=gnu++20 -Wshadow
 CXXFLAGS=                       \
+	-D LOGGING_ENABLED=false     \
 	-sASYNCIFY                  \
 	-sASSERTIONS=2              \
 	-sSTACK_OVERFLOW_CHECK=2    \
@@ -57,6 +58,11 @@ CXXFLAGS=                       \
 	-std=gnu++20                \
 	-Wshadow
 
+#	-sENVIRONMENT=worker        \
+#	-sNO_DISABLE_EXCEPTION_CATCHING \
+#	-sPROXY_TO_WORKER=1         \
+#	-sBUILD_AS_WORKER=1         \
+#	-sENVIRONMENT=web           \
 #	-sALLOW_MEMORY_GROWTH=1     \
 #	-fexceptions                \
 

@@ -141,7 +141,8 @@ int create_deconvolver(const std::string& deconv_type, const std::string& deconv
 
 	// Only have one deconvolver type for now, so use that one
 	clean_modified_deconvolvers[deconv_name] = CleanModifiedAlgorithm();
-
+	
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 	return 0;
 }
 
@@ -169,6 +170,8 @@ void prepare_deconvolver(
 		psf_image.shape,
 		run_tag
 	);
+	
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }
 
 void run_deconvolver(

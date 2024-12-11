@@ -23,6 +23,11 @@ using namespace emscripten;
 //   handles with display functions on JS side. C++ side updates raw data, JS side
 //   periodically calls display functions.
 
+EM_JS(void, update_deconv_stats, (int this_iteration, int last_plot_update_iteration), {
+	// Pass -1 to 'this_iteration' and/or 'last_plot_update_iteration' to not update value
+	if(this_iteration >=0) deconv_status_mgr.set("Deconvolution Iteration", this_iteration);
+	if(last_plot_update_iteration >=0) deconv_status_mgr.set("Last Plot Update Iteration", last_plot_update_iteration);
+})
 
 
 EM_JS(void, send_to_named_js_canvas, (const char* name, void* ptr, int size, int width, int height), {
@@ -636,6 +641,8 @@ bool CleanModifiedAlgorithm::doIter(
 	
 	LOGV_DEBUG(i);
 	
+	update_deconv_stats(i, -1);
+	
 	
 	_calc_pixel_threshold();
 	
@@ -657,42 +664,55 @@ bool CleanModifiedAlgorithm::doIter(
 	threshold_record[i] = px_threshold;
 	
 	// Check stoping criteria
+	if( i == (n_iter-1)){
+		iter_continue = false;
+		LOG_INFO("Deconvolution finished maximum number of iterations (%).", i+1);
+	}
 	if( fabs_record[i] < fabs_record[0]*fabs_frac_threshold){
 		iter_continue = false;
-		LOG_INFO("Deconvolution finished at % iterations. Absolute value of brightest pixel % is lower than threshold value %.", i,fabs_record[i], fabs_record[0]*fabs_frac_threshold);
+		LOG_INFO("Deconvolution finished at % iterations. Absolute value of brightest pixel % is lower than threshold value %.", i+1,fabs_record[i], fabs_record[0]*fabs_frac_threshold);
 	}
 	if( rms_record[i] < rms_record[0]*rms_frac_threshold){
 		iter_continue = false;
-		LOG_INFO("Deconvolution finished at % iterations. Root mean square of residual % is lower than threshold value %.", i,rms_record[i], rms_record[0]*rms_frac_threshold);
+		LOG_INFO("Deconvolution finished at % iterations. Root mean square of residual % is lower than threshold value %.", i+1,rms_record[i], rms_record[0]*rms_frac_threshold);
 	}
 	
 	if ((plot_update_interval > 0) && (!(i%plot_update_interval) || !iter_continue)){
 		// NOTE: Plotting preparation etc. goes inside this if statement
+		size_t idx_start = i+1 - plot_update_interval;
+		size_t idx_end = i+1;
 		
-		send_data_to_plot("stopping_criteria", "fabs_record", fabs_record, i - plot_update_interval, i);
-		send_data_to_plot("stopping_criteria", "rms_record", rms_record, i - plot_update_interval, i);
-		send_data_to_plot("stopping_criteria", "threshold_record", threshold_record, i - plot_update_interval, i);
+		update_deconv_stats(-1, i);
+		
+		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
+		send_data_to_plot("stopping_criteria", "fabs_record", fabs_record, idx_start, idx_end);
+		send_data_to_plot("stopping_criteria", "rms_record", rms_record, idx_start, idx_end);
+		send_data_to_plot("stopping_criteria", "threshold_record", threshold_record, idx_start, idx_end);
 		
 		
+		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 		temp_data = residual_data;
 		calculate_histogram(temp_data, histogram_edges, histogram_counts);
 	
 		send_data_to_plot("residual_histogram", "residual_histogram_data", histogram_edges, histogram_counts);
 		send_data_to_plot("residual_histogram", "threshold_line_data", threshold_record[i], 0);
 		
-		
+		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 		temp_data = components_data;
 		calculate_histogram(temp_data, histogram_edges, histogram_counts);
 		send_data_to_plot("component_histogram", "component_data", histogram_edges, histogram_counts);
 		
+		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 		temp_data = selected_pixels;
 		calculate_histogram(temp_data, histogram_edges, histogram_counts);
 		send_data_to_plot("selected_pixels_histogram", "selected_pixels_data", histogram_edges, histogram_counts);
 		
+		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 		temp_data = current_convolved;
 		calculate_histogram(temp_data, histogram_edges, histogram_counts);
 		send_data_to_plot("current_convolved_histogram", "current_convolved_data", histogram_edges, histogram_counts);
 		
+		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 		send_to_canvas(residual_data, data_shape, "residual");
 		send_to_canvas(selected_pixels, data_shape, "selected-pixels");
 		send_to_canvas(current_convolved, data_shape, "current-convolved");
@@ -716,12 +736,13 @@ void CleanModifiedAlgorithm::prepare_observations(
 	){
 	GET_LOGGER;
 	LOG_DEBUG("declare variables");
-
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 	
 	tag=run_tag;
 	data_shape_adjustment.resize(input_obs_shape.size());
 	
 	auto [adjusted_obs_data, adjusted_obs_shape ] = _ensure_odd(input_obs_data, input_obs_shape);
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 	
 	data_shape = adjusted_obs_shape;
 	data_size = du::product(data_shape);
@@ -744,6 +765,8 @@ void CleanModifiedAlgorithm::prepare_observations(
 
 	du::multiply_inplace(components_data, 0);
 
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
+
 	LOG_DEBUG("set FFT attributes");
 	// set attributes for fourier transformers
 	//fft.set_attrs(data_shape, false, true);
@@ -755,9 +778,11 @@ void CleanModifiedAlgorithm::prepare_observations(
 
 	LOG_DEBUG("Getting residual from obs_data");
 	_get_residual_from_obs(adjusted_obs_data, data_shape);
-
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
+	
 	LOG_DEBUG("Padding PSF data");
 	_get_padded_psf(input_psf_data, input_psf_shape);
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 		
 	LOG_DEBUG("precompute PSF FFT");
 	// get the FFT of the PSF, will need it later
@@ -772,6 +797,8 @@ void CleanModifiedAlgorithm::prepare_observations(
 	auto psf_fft_ifft = ifft(psf_fft);
 	du::write_as_image(_sprintf("./plots/%psf_fft_ifft_real.pgm", tag), du::real_part(psf_fft_ifft), data_shape);
 	du::write_as_image(_sprintf("./plots/%psf_fft_ifft_imag.pgm", tag), du::imag_part(psf_fft_ifft), data_shape);
+	
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }
 
 
@@ -792,7 +819,8 @@ void CleanModifiedAlgorithm::run(){
 	du::write_as_image(_sprintf("./plots/%components.pgm", tag), components_data, data_shape);
 	du::write_as_image(_sprintf("./plots/%residual.pgm", tag), residual_data, data_shape);
 	du::write_as_image(_sprintf("./plots/%residual_log.pgm", tag), du::log(residual_data), data_shape);
-
+	
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 	if (clean_beam_gaussian_sigma > 0){
 		LOG_DEBUG("Convolving result with gaussian clean beam with sigma=%", clean_beam_gaussian_sigma);
 		Eigen::MatrixXd Kernel(data_shape[0], data_shape[1]);
@@ -813,6 +841,7 @@ void CleanModifiedAlgorithm::run(){
 		Eigen::Vector2d idx {0,0};
 
 		for(int i=0;i < Kernel.rows(); idx[0]+=1, ++i){
+			emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 			for(int j=0; j<Kernel.cols(); idx[1]+=1, ++j){
 				Kernel(i,j) = exp(-static_cast<double>((idx-pos).transpose() * Sigma * (idx-pos)));
 				//LOG_DEBUG("Kernel(%,%) = %",i,j,Kernel(i,j));
@@ -854,7 +883,7 @@ void CleanModifiedAlgorithm::run(){
 		clean_map = components_data;
 	}
 
-
+	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 	if(add_residual){
 		LOG_DEBUG("Adding residual to clean map");
 		du::add_inplace(clean_map, residual_data);

@@ -231,7 +231,7 @@ class ControlManager{
 		return new Control(html_element, input_element, label_element, value_getter, deserialiser, validator)
 	}
 	
-	static create_control_for(param){
+	static create_control_for(param, on_valid_fn, on_invalid_fn){
 		let ctl = null
 		let input_type = null
 		
@@ -338,8 +338,10 @@ class ControlManager{
 		ctl.addEventListener("change", (e)=>{
 				if (ctl.validate()){
 					ctl.html_container.setAttribute("validated", "true")
+					on_valid_fn()
 				} else {
 					ctl.html_container.setAttribute("validated", "false")
+					on_invalid_fn()
 				}
 			}
 		)
@@ -422,7 +424,19 @@ class CleanModifiedParameters{
 		
 		// build controls for each parameter
 		for (const param of CleanModifiedParameters.parameters){
-			this.parameter_ctls.set(param.name,  ControlManager.create_control_for(param))
+			this.parameter_ctls.set(
+				param.name,  
+				ControlManager.create_control_for(
+					param,
+					()=>{
+						let is_good = this.validate().length == 0
+						deconv_status_mgr.set("Parameters Validated", is_good, {"is-good":is_good})
+					},
+					()=>{
+						deconv_status_mgr.set("Parameters Validated", false, {"is-good":false})
+					}
+				)
+			)
 		}
 	
 	
@@ -465,7 +479,7 @@ class CleanModifiedParameters{
 		return param_ctl_values
 	}
 	
-	valieOf(param_name){
+	valueOf(param_name){
 		this.parameter_ctls.get(param_name).getValue()
 	}
 	
