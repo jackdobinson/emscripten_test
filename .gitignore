@@ -5,3 +5,5 @@ deconv_testing/share/
 deconv_testing/bin/
 deconv_testing/archive/
 deconv_testing/lib/
+deconv_testing/nohup.out
+deconv_testing/wasm_server.pid
