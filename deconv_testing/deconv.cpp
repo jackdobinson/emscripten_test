@@ -713,10 +713,10 @@ bool CleanModifiedAlgorithm::doIter(
 		send_data_to_plot("current_convolved_histogram", "current_convolved_data", histogram_edges, histogram_counts);
 		
 		emscripten_sleep(1); // pass control back to javascript to allow event loop to run
-		send_to_canvas(residual_data, data_shape, "residual");
-		send_to_canvas(selected_pixels, data_shape, "selected-pixels");
-		send_to_canvas(current_convolved, data_shape, "current-convolved");
-		send_to_canvas(components_data, data_shape, "components");
+		send_to_canvas(residual_data, data_shape, "inprogress-residual");
+		send_to_canvas(selected_pixels, data_shape, "inprogress-selected-pixels");
+		send_to_canvas(current_convolved, data_shape, "inprogress-current-convolved");
+		send_to_canvas(components_data, data_shape, "inprogress-components");
 	}
 	
 	

@@ -82,14 +82,7 @@ progress_plot_details.onclick = (e)=>{
 		plot_container_1.show()
 	}
 }
-/*
-let svg_figure = new SvgFig(
-	"progress plots", 
-	document.getElementById("progress-plots"),
-	V.from(20,20),
-	new R(0,0,2,2)
-)
-*/
+
 let dataset_cpp_array_cache = new Map();
 let plot_name_map = new Map();
 
