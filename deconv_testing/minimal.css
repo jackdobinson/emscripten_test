@@ -81,6 +81,9 @@ canvas {
 div.h-flow{
 	display: flex;
 	flex-flow: row wrap;
+	flex:1;
+	align-items:flex-start;
+	/*> :not(.h-flow):not(.v-flow) {*/
 	> * {
 		flex: 1;
 		width: fit-content;
@@ -101,6 +104,9 @@ div.h-flow{
 div.v-flow{
 	display: flex;
 	flex-flow: column wrap;
+	flex: 1;
+	align-items:flex-start;
+	/*> :not(.h-flow):not(.v-flow) {*/
 	> * {
 		flex: 1;
 		width: auto;
@@ -258,4 +264,8 @@ div.canvas-container{
 
 .button-like:hover {
 	background: #EEEEEE;
+}
+
+.caption{
+	font-size:smaller;
 }

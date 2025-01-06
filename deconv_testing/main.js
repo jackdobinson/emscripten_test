@@ -62,6 +62,7 @@ let deconv_residual = null
 let clean_modified_params = new CleanModifiedParameters(document.getElementById("param-container"))
 
 
+
 let progress_plot_details = document.getElementById("progress-plot-details")
 let plot_container_1 = document.getElementById("plot-container-1")
 plot_container_1.hide = ()=>{

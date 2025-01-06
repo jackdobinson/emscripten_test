@@ -114,25 +114,70 @@
 			</details>
 			<div id="plot-container-1">
 				<div class="v-flow">
-					<div class="h-flow">
-						<div class="v-flow">
+					<div class="v-flow">
+						<div class="h-flow">
 							<div class="item">
 								<p>Residual</p>
 								<canvas id="inprogress-residual-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+								<div class="caption">
+									<p>
+									Figure 1: Shows the <em>residual</em> (the components at the current iteration convolved with the PSF, 
+									subtracted from the original image) at the current iteration.
+									</p>
+									<p>
+									This should progress from being identical to the original image at iteration 0, to being 
+									mostly (if not entirely) noise at the final iteration.
+									</p>
+								</div>
 							</div>
 							<div class="item">
 								<p>Selected Pixels</p>
 								<canvas id="inprogress-selected-pixels-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+								<div class="caption">
+									<p>
+									Figure 2: Shows the <em>selected pixels</em> at the current iteration. Pixels are selected as those whose magnitude is
+									larger than the brightest pixel in the <em>residual</em> multipled by the <em>threshold</em> of the 
+									current iteration. At each iteration the <em>selected pixels</em> are multipled by the <em>loop_gain</em> and added to the 
+									<em>current components</em>. This image gives direct insight into what is happening each step and you are 
+									often able to pinpoint the stage in a deconvolution where things start to go wrong by watching this image.
+									</p>
+									<p>
+									When using <em>adaptive_threshold_flag</em> this may look similar to the residual (especially at the start)
+									as adaptive thresholding attempts to initially separate the image into low brightness "background" 
+									and high brightness"foreground", so in the vast majority of images the object will be the "foreground" initially.
+									As iterations progress, bright features start to be classified as "foreground". 
+									</p>
+									<p>
+									When using a <em>manual threshold</em>, this will often look very different from the residual at all times. This
+									is because a manual threshold is not dynamic, generally the selected pixels will start of as a contiguous blob,
+									but become more fragmented over time. This can be a source of speckling that degrades the final image, therefore
+									<em>adaptive thresholding</em> is recommended. 
+									</p>
+								</div>
 							</div>
 						</div>
-						<div class="v-flow">
+						<div class="h-flow">
 							<div class="item">
 								<p>Current Convolved</p>
 								<canvas id="inprogress-current-convolved-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+								<div class="caption">
+									<p>
+									Figure 3: Shows the <em>currently</em> selected pixels <em>convolved</em> with the PSF. This looks like (and is)
+									a "smoothed out" view of the <em>selected pixels</em>. You can think of this image as what will be subtracted from
+									the current <em>residual</em> to get the next iteration's <em>residual</em>.
+									</p>
+								</div>
+							
 							</div>
 							<div class="item">
 								<p>Current Components</p>
 								<canvas id="inprogress-components-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+								<div class="caption">
+									<p>
+									Figure 4: Shows the <em>current components</em> of the deconvolved image. If deconvolution were to stop, this
+									would be come the <em>clean map</em> (if no <em>clean beam</em> is used and the <em>residual</em> is not added).
+									</p>
+								</div>
 							</div>
 						</div>
 					</div>
