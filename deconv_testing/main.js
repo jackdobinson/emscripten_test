@@ -213,7 +213,8 @@ download_residual_button.addEventListener(
 	)
 )
 
-run_deconv_button.addEventListener("click", async (e)=>{
+run_deconv_button.addEventListener("click", 
+	async (e)=>{
 		try{
 			e.target.textContent = "Deconvolution in progress..."
 			e.target.disabled = true

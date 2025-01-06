@@ -1,4 +1,4 @@
-
+#!/usr/bin/env bash
 
 repos_dir="${REPOS_DIR:-"${HOME}/repos"}"
 emscripten_repo="${repos_dir}/emsdk"
@@ -9,10 +9,13 @@ wasm_server_pid=""
 
 set -o errexit -o pipefail -o nounset
 
-
-echo "${repos_dir}"
-echo "${emscripten_repo}"
-echo "${this_dir}"
+echo '##########################'
+echo '# Starting Build Process #'
+echo '##########################'
+echo ""
+echo "repos_dir = ${repos_dir}"
+echo "emscripten_repo = ${emscripten_repo}"
+echo "this_dir = ${this_dir}"
 
 ###########################
 # Launch WASM test server #
@@ -34,10 +37,12 @@ else
 	launch_wasm_server_flag="true"
 fi
 
-
+echo ""
 echo "########################################"
 if [[ "${launch_wasm_server_flag}" == "true" ]]; then
-	echo "# Need to start wasm test server       #"
+	echo "# Need to start wasm test server.      #"
+	echo "# Starting wasm test server........... #"
+	echo "# .................................... #"
 	
 	nohup python3 -m http.server &> nohup.out &
 	wasm_server_pid=$!
@@ -49,12 +54,21 @@ else
 fi
 echo "########################################"
 
-echo ""
-echo "Wasm test server PID is ${wasm_server_pid}"
-echo ""
-echo "In your browser, navigate to 'localhost:8000/minimal.html' to see the web page."
-echo ""
-echo "Use the command \`kill ${wasm_server_pid}\` to stop serving the web page."
+wasm_server_kill_command="\`kill ${wasm_server_pid}\`"
+wasm_server_kill_command_padding=""
+printf -v wasm_server_kill_command_padding '%*s' $((69-${#wasm_server_kill_command})) ''
+
+echo "# INFORMATION ###########################################################"
+echo "#                                                                       #"
+echo "# Wasm test server PID is ${wasm_server_pid}                            #"
+echo "#                                                                       #"
+echo "# In your browser, navigate to 'localhost:8000/minimal.html' to see the #"
+echo "# web page.                                                             #"
+echo "#                                                                       #"
+echo "# Use the following command to stop serving the web page:               #"
+echo "# ${wasm_server_kill_command}${wasm_server_kill_command_padding} #"
+echo "#                                                                       #"
+echo "#########################################################################"
 
 
 ##############################
