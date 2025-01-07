@@ -245,6 +245,38 @@ emscripten::val get_tiff(
 
 }
 
+double get_data_min(
+		const std::string& deconv_type, 
+		const std::string& deconv_name, 
+		const std::string& file_id
+	){
+	// Only one deconvolver type right now, therefore skip deconv_type dispatch
+	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	if (file_id == "deconv.clean_map"){
+		return du::min(deconv.clean_map);
+	}
+	if (file_id == "deconv.residual"){
+		return du::min(deconv.residual_data);
+	}
+	throw std::runtime_error("Unknown file id");
+}
+
+double get_data_max(
+		const std::string& deconv_type, 
+		const std::string& deconv_name, 
+		const std::string& file_id
+	){
+	// Only one deconvolver type right now, therefore skip deconv_type dispatch
+	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	if (file_id == "deconv.clean_map"){
+		return du::max(deconv.clean_map);
+	}
+	if (file_id == "deconv.residual"){
+		return du::max(deconv.residual_data);
+	}
+	throw std::runtime_error("Unknown file id");
+}
+
 
 
 int main(int argc, char** argv){
@@ -348,6 +380,8 @@ void set_deconvolver_parameters(
 
 
 EMSCRIPTEN_BINDINGS(my_module){
+	function("get_data_max", &get_data_max);
+	function("get_data_min", &get_data_min);
 	function("get_tiff", &get_tiff);
 	function("create_deconvolver", &create_deconvolver);
 	function("prepare_deconvolver", &prepare_deconvolver);

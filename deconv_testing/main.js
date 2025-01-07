@@ -219,7 +219,7 @@ plot_name_map.set("current_convolved_histogram", figure5.plot_areas.get("current
 download_clean_map_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 
-		()=>{
+		(file_id)=>{
 			let fn = ""
 			let ext = ".tiff"
 			if(sci_image_holder.file.name.endsWith(".tiff")){
@@ -230,7 +230,11 @@ download_clean_map_button.addEventListener(
 				ext = ".tif"
 			}
 			
-			return fn+"deconvolved_clean_map" + ext
+			console.log(deconv_type, deconv_name, file_id)
+			const data_min = Module.get_data_min(deconv_type, deconv_name, file_id)
+			const data_max = Module.get_data_max(deconv_type, deconv_name, file_id)
+			
+			return fn+`deconvolved_clean_map__min_${data_min}_max_${data_max}` + ext
 		},
 		"deconv.clean_map", 
 		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name),
@@ -241,7 +245,7 @@ download_clean_map_button.addEventListener(
 download_residual_button.addEventListener(
 	"click",
 	new WasmDataDownloader( 
-		()=>{
+		(file_id)=>{
 			let fn = ""
 			let ext=".tiff"
 			if(sci_image_holder.file.name.endsWith(".tiff")){
@@ -252,7 +256,10 @@ download_residual_button.addEventListener(
 				ext = ".tif"
 			}
 			
-			return fn+"deconvolved_residual"+ext
+			const data_min = Module.get_data_min(deconv_type, deconv_name, file_id)
+			const data_max = Module.get_data_max(deconv_type, deconv_name, file_id)
+			
+			return fn+`deconvolved_residual__min_${data_min}_max_${data_max}`+ext
 		},
 		"deconv.residual", 
 		(file_id)=>Module.get_tiff(deconv_type, deconv_name, file_id, sci_image_holder.name),
