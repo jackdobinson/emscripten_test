@@ -54,7 +54,7 @@
 
 			<div class="h-flow">
 				<div class="v-flow canvas-container">
-					<div class="item">
+					<div id="science-target-button" class="item">
 						<label for="sci_file">
 							<div class="button-like">
 								Select Science Target File...
@@ -69,7 +69,7 @@
 				</div>
 
 				<div class="v-flow">
-					<div class="item">
+					<div id="psf-target-button" class="item">
 						<label for="psf_file">
 							<div class="button-like">
 								Select PSF File...
@@ -88,21 +88,48 @@
 		
 		<hr>
 		
+		<div id="results-region">
+			<details id="results-details" class="results-details">
+				<summary><h4>Results</h4></summary>
+			</details>
+			<div id="results">
+				<div class="h-flow">
+					<div class="item">
+						<div>
+							<canvas id="clean_map_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+							<button class="download-result" id="download-clean-map-button" type="button">Download Clean Map .TIFF</button>
+						</div>
+					</div>
+					<div class="item">
+						<div>
+							<canvas id="residual_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+							<button class="download-result" id="download-residual-button" type="button">Download Residual .TIFF</button>
+						</div>
+					</div>
+				</div>
+				<p style="font-size: small;">Note: While the algorithm used conserves flux, the TIFF format does not know about flux. Therefore we use the entire available range of values.</p>
+			</div>
+		</div>
+		
+		<hr>
+		
 		<div class="h-flow">
 			<div class="item">
 				<h4>Deconvolution Parameters</h4>
 				<div id="param-container"></div>
 				<button class="run-button" id="run_deconv" type="button">Run Deconvolution</button>
 			</div>
-			<div class="item">
+			<div id="deconvolution-status" class="item">
 				<h4>Deconvolution Status</h4>
 				<div id="status-container"></div>
 			</div>
 		</div>
 		
 		
+		
+		
 		<hr>
-		<div>
+		<div id="progress-plot-region">
 			<details id="progress-plot-details" class="progress-plot-details">
 				<summary><h4 style="display:inline;">Progress Plots</h4></summary>
 				<!--
@@ -116,9 +143,9 @@
 				<div class="v-flow">
 					<div class="v-flow">
 						<div class="h-flow">
-							<div class="item">
-								<p>Residual</p>
-								<canvas id="inprogress-residual-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+							<div class="item figure">
+								<p class="title">Residual</p>
+								<canvas id="inprogress-residual-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 								<div class="caption">
 									<p>
 									Figure 1: Shows the <em>residual</em> (the components at the current iteration convolved with the PSF, 
@@ -130,9 +157,9 @@
 									</p>
 								</div>
 							</div>
-							<div class="item">
-								<p>Selected Pixels</p>
-								<canvas id="inprogress-selected-pixels-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+							<div class="item figure">
+								<p class="title">Selected Pixels</p>
+								<canvas id="inprogress-selected-pixels-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 								<div class="caption">
 									<p>
 									Figure 2: Shows the <em>selected pixels</em> at the current iteration. Pixels are selected as those whose magnitude is
@@ -157,9 +184,9 @@
 							</div>
 						</div>
 						<div class="h-flow">
-							<div class="item">
-								<p>Current Convolved</p>
-								<canvas id="inprogress-current-convolved-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+							<div class="item figure">
+								<p class="title">Current Convolved</p>
+								<canvas id="inprogress-current-convolved-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 								<div class="caption">
 									<p>
 									Figure 3: Shows the <em>currently</em> selected pixels <em>convolved</em> with the PSF. This looks like (and is)
@@ -169,9 +196,9 @@
 								</div>
 							
 							</div>
-							<div class="item">
-								<p>Current Components</p>
-								<canvas id="inprogress-components-canvas" class="auto-size" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+							<div class="item figure">
+								<p class="title">Current Components</p>
+								<canvas id="inprogress-components-canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 								<div class="caption">
 									<p>
 									Figure 4: Shows the <em>current components</em> of the deconvolved image. If deconvolution were to stop, this
@@ -186,24 +213,8 @@
 			</div>
 		</div>
 		
-		<hr>
 		
-		<h4>Results</h4>
-		<div id="results" class="h-flow">
-			<div class="item">
-				<div>
-					<canvas id="clean_map_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-					<button class="download-result" id="download-clean-map-button" type="button">Download Clean Map .TIFF</button>
-				</div>
-			</div>
-			<div class="item">
-				<div>
-					<canvas id="residual_canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-					<button class="download-result" id="download-residual-button" type="button">Download Residual .TIFF</button>
-				</div>
-			</div>
-		</div>
-		<p style="font-size: small;">Note: While the algorithm used conserves flux, the TIFF format does not know about flux. Therefore we use the entire available range of values.</p>
+		
 		
 		<hr/>
 			<textarea class="emscripten" id="output" rows="8"></textarea>
