@@ -1032,7 +1032,155 @@ namespace data_utils{
 		return(r);
 	}
 
+	// Get connected regions
+	struct RunLengthEncoding{
+		size_t y;
+		size_t x_begin;
+		size_t x_end;
+	};
 
+	template <class T1>
+	std::vector<RunLengthEncoding> get_run_length_encoding(const std::vector<bool>& data, const std::vector<T1>& shape){
+		// NOTE: Can only get run-length encoding for BOOLEAN images at the moment
+		std::vector<RunLengthEncoding> rle;
+		rle.reserve(shape[1]); // reserve at least enough for each row in image
+		assert(shape.size() == 2 && "Can only get run-length-encoding for 2d data for now.");
+		
+		bool run_is_zero=true;
+		size_t temp = 0;
+		for(size_t i=0; i<shape[0]; ++i){
+			if(!run_is_zero){
+				rle.emplace_back(i-1, temp, shape[1]);
+				temp = 0;
+				run_is_zero=true;
+			}
+			
+			for(size_t j=0; j<shape[1]; ++j){
+				if (run_is_zero && data[i*shape[0]+j]==1){
+					temp = j;
+					run_is_zero = false;
+				}
+				else if (!run_is_zero && data[i*shape[0]+j]==0){
+					rle.emplace_back(i, temp, j);
+					temp = 0;
+					run_is_zero = true;
+				}
+			}
+		}
+		return rle;
+	}
+	
+	struct ConnectedRegionNode;
+	
+	
+	struct ConnectedRegionNode{
+		
+	
+		ConnectedRegionNode* parent;
+		std::vector<ConnectedRegionNode*> children;
+		RunLengthEncoding span;
+		
+		ConnectedRegionNode* get_root(){
+			ConnectedRegionNode* node = this;
+			while(node->parent != nullptr){
+				node = node->parent;
+			}
+			return node;
+		}
+		
+		void destroy_tree(bool from_root=true){
+			ConnectedRegionNode* node = (from_root ? this->get_root() : this);
+			for(ConnectedRegionNode* child : node->children){
+				child->destroy_tree(false);
+			}
+			delete this;
+		}
+		
+	};
+
+
+	template<class T>
+	std::vector<ConnectedRegionNode*> get_regions(const std::vector<bool>& data, const std::vector<T>& shape){
+		// NOTE: Have to remember to clean these up.
+		// I should make this into a class so I can use destructors etc.
+		std::vector<RunLengthEncoding> rle_vector = get_run_length_encoding(data, shape);
+		std::vector<ConnectedRegionNode*> region_nodes;
+		std::vector<ConnectedRegionNode*> region_root_nodes;
+		
+		bool new_layer = true;
+		size_t prev_rle_y = (size_t)(-1);
+		size_t prev_layer_start_idx = 0;
+		size_t this_node_idx=0;
+		size_t n_nodes_created_last_layer = 0;
+		size_t n_nodes_created_this_layer = 0;
+		
+		
+		ConnectedRegionNode* prev_layer_start_ptr=nullptr;
+		ConnectedRegionNode* root_node_ptr;
+		ConnectedRegionNode* this_node_ptr;
+		
+		for(const RunLengthEncoding& rle : rle_vector){
+			if (prev_rle_y != rle.y){
+				new_layer = true;
+				n_nodes_created_last_layer = n_nodes_created_this_layer;
+				n_nodes_created_this_layer = 0;
+				
+				prev_rle_y = rle.y;
+			}
+			
+			// Each RLE is always a node
+			this_node_idx = region_nodes.size();
+			region_nodes.push_back(new ConnectedRegionNode(nullptr, {}, rle));
+			this_node_ptr = region_nodes.back();
+			++n_nodes_created_this_layer;
+			
+		
+			// loop through previous layer nodes, if there we overlap with one it should be our parent
+			for(auto node_it = region_nodes.rbegin() + (n_nodes_created_this_layer + n_nodes_created_last_layer); node_it < region_nodes.rbegin() + n_nodes_created_this_layer; ++node_it){
+				
+				// If I overlap
+				if ((*node_it)->span.y == (rle.y-1) && rle.x_begin < (*node_it)->span.x_begin && rle.x_end > (*node_it)->span.x_end){
+					if (this_node_ptr->parent == nullptr){
+						// If I do not have a parent, the previous layer node becomes my parent
+						
+						this_node_ptr->parent = &(*((*node_it)));
+						(*node_it)->children.push_back(this_node_ptr);
+					}
+					else {
+						// I do have a parent, so my root should be a child of the (*node_it) (if they do not share a root already)
+						// if they share a root do nothing
+						root_node_ptr = this_node_ptr->get_root();
+						if (root_node_ptr != (*node_it)->get_root()){
+						
+							// Erase `root_node_ptr` from vector of root nodes
+							int i=0;
+							for(i=0; i< region_root_nodes.size(); ++i){
+								if(region_root_nodes[i] == root_node_ptr){
+									break;
+								}
+							}
+							if(i==region_root_nodes.size()){
+								throw std::runtime_error("Should have found root node in vector of root nodes but did not.");
+							} else {
+								region_root_nodes.erase(region_root_nodes.begin()+i);
+							}
+							
+							// link `root_node_ptr` as child of `(*node_it)`
+							root_node_ptr->parent = (*node_it);
+							(*node_it)->children.push_back(root_node_ptr);
+							
+						}
+					}
+				}
+			}
+			
+			// If I have got here without setting a parent, I should be a root node myself
+			region_root_nodes.push_back(this_node_ptr);
+			
+		}
+		
+		return region_root_nodes;
+	}
 
 	// ARRAY UTILITY OPERATIONS
 	template<class R, class T>

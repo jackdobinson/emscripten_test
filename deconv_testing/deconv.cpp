@@ -502,7 +502,7 @@ void CleanModifiedAlgorithm::_calc_pixel_threshold(){
 		px_threshold = threshold * du::absmax(residual_data);
 	}
 	else {
-		puts("NOTE: Using Otsu's method for thresholding");
+		//puts("NOTE: Using Otsu's method for thresholding");
 		// Otsu's method
 		// Minimises the intra-class variance (variance of pixels inside a class)
 		//
