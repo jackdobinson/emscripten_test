@@ -447,12 +447,22 @@ namespace data_utils{
 		return(accumulator);
 	}
 	
-	template<class T>
-	T sum(const std::vector<T>& a){
+	template<class T, class R=T>
+	R sum(const std::vector<T>& a){
 		// Add up all elements in array
-		T sum=0;
+		R sum=0;
 		for(auto item : a){
 			sum += item;
+		}
+		return(sum);
+	}
+	
+	template<class T, class R=T>
+	R sum_masked(const std::vector<T>& a, const std::vector<bool>& mask){
+		// Add up all elements in array where 'mask' is true
+		R sum=0;
+		for(size_t i=0; i<a.size(); ++i){
+			sum += a[i]*mask[i];
 		}
 		return(sum);
 	}
@@ -725,23 +735,100 @@ namespace data_utils{
 	
 	template<class T, class U>
 	std::vector<double> idx_moment_1(const std::vector<T>& a, const std::vector<U>& shape){
+		GET_LOGGER;
 		std::vector<double> temp(shape.size());
 		std::vector<double> idx_moment(shape.size());
 		std::vector<U> reversed_strides = reverse(get_strides(shape));
 		std::vector<U> nd_idx;
-		T sum=0;
+		double sum=0;
 		
 		for(size_t i=0; i<a.size(); ++i){
 			sum += a[i];
+			
+			// Get n-dimensional index of 1d index 'i'
 			nd_idx = reversed_strides;
 			reverse_inplace(cumulative_ratio_inplace(i, nd_idx));
+			
+			// Get nd_idx*a[i] into 'temp'
 			fill(temp,1);
 			multiply_inplace(temp, nd_idx);
 			multiply_inplace(temp, a[i]);
+			
+			// Add temp to moment accumulator
 			add_inplace(idx_moment, temp);
 		}
 		ratio_inplace(idx_moment, sum);
+		
 		return idx_moment;
+	}
+	
+	template<class T, class U, class V>
+	std::vector<double> idx_central_moment(const std::vector<T>& a, const std::vector<U>& shape, const std::vector<V>& point, int power){
+		GET_LOGGER;
+		std::vector<double> temp(shape.size());
+		std::vector<double> temp2(shape.size());
+		std::vector<double> idx_moment(shape.size());
+		std::vector<U> reversed_strides = reverse(get_strides(shape));
+		std::vector<U> nd_idx;
+		double sum=0;
+		
+		for(size_t i=0; i<a.size(); ++i){
+			sum += a[i];
+			
+			// Get n-dimensional index of 1d index 'i'
+			nd_idx = reversed_strides;
+			reverse_inplace(cumulative_ratio_inplace(i, nd_idx));
+			
+			// Get a[1]*(nd_idx-point)^(power) into 'temp'
+			fill(temp,1);
+			fill(temp2,1);
+			multiply_inplace(temp2, nd_idx);
+			subtract_inplace(temp2, point);
+			for(short j=0;j<power;++j){
+				multiply_inplace(temp,temp2);
+			}
+			multiply_inplace(temp, a[i]);
+			
+			// Add temp to moment accumulator
+			add_inplace(idx_moment, temp);
+		}
+		ratio_inplace(idx_moment, sum);
+		
+		return idx_moment;
+	}
+	
+	template<class T2, class T3>
+	double bounding_circle_radius_of_mask(const std::vector<bool>& a, const std::vector<T2>& shape, const std::vector<T3>& point){
+		GET_LOGGER;
+		std::vector<double> temp(shape.size());
+		std::vector<T2> reversed_strides = reverse(get_strides(shape));
+		std::vector<T2> nd_idx;
+		double max_radius=0;
+		double radius;
+		
+		for(size_t i=0; i<a.size(); ++i){
+			if (a[i] == 0){
+				continue;
+			}
+			// Get n-dimensional index of 1d index 'i'
+			nd_idx = reversed_strides;
+			reverse_inplace(cumulative_ratio_inplace(i, nd_idx));
+			
+			// Get (nd_idx-point)^2 into 'temp'
+			fill(temp,1);
+			multiply_inplace(temp, nd_idx);
+			subtract_inplace(temp, point);
+			multiply_inplace(temp,temp);
+
+			radius = sqrt(sum(temp));
+			
+			// set max radius
+			if(radius > max_radius){
+				max_radius = radius;
+			}
+		}
+		
+		return max_radius;
 	}
 	
 	// SHIFT N-DIMENSIONAL ARRAYS
@@ -1096,11 +1183,70 @@ namespace data_utils{
 			delete this;
 		}
 		
+		template<class T1, class T2, class T3>
+		void set_region_to(
+				std::vector<T1>& a, // array to set region to value
+				const std::vector<T2>& shape, // shape of array 
+				T3 value, // value to set to
+				bool from_root=true //start at root node?
+			){
+			ConnectedRegionNode* node = (from_root ? this->get_root() : this);
+			
+			for (auto child : node->children){
+				child->set_region_to<T1,T2,T3>(a, shape, value, false);
+			}
+			for(int i=node->span.x_begin; i<node->span.x_end; ++i){
+				a[node->span.y*shape[0]+i] = value;
+			}
+		}
+		
+	};
+	
+	struct Regions{
+		std::vector<ConnectedRegionNode*> root_nodes;
+		
+		~Regions(){
+			for(auto root_node : root_nodes){
+				root_node->destroy_tree();
+			}
+		}
+		
+		void add(ConnectedRegionNode* root_node){
+			root_nodes.push_back(root_node);
+		}
+		
+		void remove(ConnectedRegionNode* root_node){
+			int i=0;
+			for(i=0; i<root_nodes.size(); ++i){
+				if(root_nodes[i] == root_node){
+					break;
+				}
+			}
+			if(i<root_nodes.size()){
+				root_nodes[i] = root_nodes.back();
+				root_nodes.pop_back();
+			}
+			root_node->destroy_tree();
+		}
+		
+		template<class T1, class T2>
+		void label(
+				std::vector<T1>& a, // array to label
+				const std::vector<T2>& shape // shape of array 
+			){
+			T1 value(0);
+			for(auto root_node : root_nodes){
+				root_node->set_region_to<T1,T2,T2>(a, shape, ++value);
+			}
+		}
+		
 	};
 
 
 	template<class T>
-	std::vector<ConnectedRegionNode*> get_regions(const std::vector<bool>& data, const std::vector<T>& shape){
+	//std::vector<ConnectedRegionNode*> get_regions(const std::vector<bool>& data, const std::vector<T>& shape){
+	Regions get_regions(const std::vector<bool>& data, const std::vector<T>& shape){
+		//GET_LOGGER;
 		// NOTE: Have to remember to clean these up.
 		// I should make this into a class so I can use destructors etc.
 		std::vector<RunLengthEncoding> rle_vector = get_run_length_encoding(data, shape);
@@ -1120,6 +1266,9 @@ namespace data_utils{
 		ConnectedRegionNode* this_node_ptr;
 		
 		for(const RunLengthEncoding& rle : rle_vector){
+			//LOG_DEBUG("-----------------------------");
+			//LOGV_DEBUG(rle.y, rle.x_begin, rle.x_end);
+			
 			if (prev_rle_y != rle.y){
 				new_layer = true;
 				n_nodes_created_last_layer = n_nodes_created_this_layer;
@@ -1127,6 +1276,13 @@ namespace data_utils{
 				
 				prev_rle_y = rle.y;
 			}
+			else {
+				new_layer = false;
+			}
+			
+			//LOGV_DEBUG(new_layer);
+			//LOGV_DEBUG(n_nodes_created_last_layer);
+			//LOGV_DEBUG(n_nodes_created_this_layer);
 			
 			// Each RLE is always a node
 			this_node_idx = region_nodes.size();
@@ -1136,29 +1292,44 @@ namespace data_utils{
 			
 		
 			// loop through previous layer nodes, if there we overlap with one it should be our parent
-			for(auto node_it = region_nodes.rbegin() + (n_nodes_created_this_layer + n_nodes_created_last_layer); node_it < region_nodes.rbegin() + n_nodes_created_this_layer; ++node_it){
+			for(auto node_it = region_nodes.end() - (n_nodes_created_this_layer + n_nodes_created_last_layer); node_it < (region_nodes.end() - n_nodes_created_this_layer); ++node_it){
+				//LOGV_DEBUG(n_nodes_created_this_layer + n_nodes_created_last_layer);
+				//LOGV_DEBUG(this_node_ptr, *node_it);
+				//LOG_DEBUG("this_node % % %    node_it % % %", 
+				//	this_node_ptr->span.y, this_node_ptr->span.x_begin, this_node_ptr->span.x_end, 
+				//	(*node_it)->span.y, (*node_it)->span.x_begin, (*node_it)->span.x_end
+				//);
 				
 				// If I overlap
-				if ((*node_it)->span.y == (rle.y-1) && rle.x_begin < (*node_it)->span.x_begin && rle.x_end > (*node_it)->span.x_end){
+				if ((*node_it)->span.y == (rle.y-1) && rle.x_begin < (*node_it)->span.x_end && rle.x_end > (*node_it)->span.x_begin){
+					//LOG_DEBUG("'this_node' overlaps with 'node-it'");
+					//LOGV_DEBUG(this_node_ptr->parent);
+					
+					
 					if (this_node_ptr->parent == nullptr){
 						// If I do not have a parent, the previous layer node becomes my parent
-						
+						//LOG_DEBUG("Node has NULL parent, previous node it overlaps with becomes parent");
 						this_node_ptr->parent = &(*((*node_it)));
 						(*node_it)->children.push_back(this_node_ptr);
 					}
 					else {
+						//LOG_DEBUG("Node does NOT have NULL parent");
 						// I do have a parent, so my root should be a child of the (*node_it) (if they do not share a root already)
 						// if they share a root do nothing
 						root_node_ptr = this_node_ptr->get_root();
 						if (root_node_ptr != (*node_it)->get_root()){
-						
+							//LOG_DEBUG("Node does not have same parent as node_it, so should link it");
+							
+							
 							// Erase `root_node_ptr` from vector of root nodes
+							//LOG_DEBUG("Erase root node of 'this_node' from root node vector");
 							int i=0;
 							for(i=0; i< region_root_nodes.size(); ++i){
 								if(region_root_nodes[i] == root_node_ptr){
 									break;
 								}
 							}
+							//LOG_DEBUG("Found root node of 'this_node' at index % of root node vector", i);
 							if(i==region_root_nodes.size()){
 								throw std::runtime_error("Should have found root node in vector of root nodes but did not.");
 							} else {
@@ -1166,21 +1337,29 @@ namespace data_utils{
 							}
 							
 							// link `root_node_ptr` as child of `(*node_it)`
+							//LOG_DEBUG("linking root of 'this_node' to root of node_it");
 							root_node_ptr->parent = (*node_it);
 							(*node_it)->children.push_back(root_node_ptr);
 							
 						}
+						//else {
+						//	LOG_DEBUG("Node has same parent as node_it");
+						//}
 					}
 				}
 			}
 			
 			// If I have got here without setting a parent, I should be a root node myself
-			region_root_nodes.push_back(this_node_ptr);
+			if(this_node_ptr->parent == nullptr){
+				//LOG_DEBUG("Setting 'this_node' as root as do not have parent");
+				region_root_nodes.push_back(this_node_ptr);
+			}
 			
 		}
 		
-		return region_root_nodes;
+		return Regions(region_root_nodes);
 	}
+
 
 	// ARRAY UTILITY OPERATIONS
 	template<class R, class T>

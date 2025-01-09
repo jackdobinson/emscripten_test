@@ -3,7 +3,7 @@
 // SPECIFIC TYPE OUTPUT
 std::ostream& operator<<(std::ostream& os, const std::byte& a){
 	char buf[5];
-	snprintf(buf, 5, "%x", a);
+	snprintf(buf, 5, "%x", (uint8_t)a);
 	os << buf;
 	return os;
 }

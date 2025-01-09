@@ -559,6 +559,7 @@ void CleanModifiedAlgorithm::_calc_pixel_threshold(){
 }
 
 void CleanModifiedAlgorithm::_select_update_pixels(){
+	puts("Getting selected pixels");
 	px_choice_map = du::mask_where(
 		residual_data, 
 		std::function<bool(double)>(
@@ -567,6 +568,8 @@ void CleanModifiedAlgorithm::_select_update_pixels(){
 			}
 		)
 	);
+	
+	
 	du::set_to(selected_pixels, 0.0);
 	du::set_at_mask(selected_pixels, px_choice_map, residual_data);
 }
@@ -648,8 +651,28 @@ bool CleanModifiedAlgorithm::doIter(
 	
 	_select_update_pixels();
 	
-	du::multiply_inplace(selected_pixels, loop_gain);
-
+	if (false){
+		// Experimental scaling of loop gain based on compactness of selected pixels
+		std::vector<double> center_of_mass = du::idx_moment_1(px_choice_map, data_shape);
+		double bounding_circle_radius = du::bounding_circle_radius_of_mask(px_choice_map, data_shape, center_of_mass);
+		double compactness = du::sum<bool,double>(px_choice_map)/(M_PI*bounding_circle_radius*bounding_circle_radius);
+		double selected_signal_factor = du::sum_masked(residual_data, px_choice_map)/du::sum(residual_data);
+		
+		double loop_gain_fraction = 0.8; // make it so the minimum loop gain can be 20% of the full loop gain
+		double modified_loop_gain = compactness*loop_gain*loop_gain_fraction + (1-loop_gain_fraction)*loop_gain;
+		
+		printf("center of mass %g %g\n", center_of_mass[0], center_of_mass[1]);
+		printf("bounding_circle_radius %g\n", bounding_circle_radius);
+		printf("Bounding cirle area %g\n", M_PI*bounding_circle_radius*bounding_circle_radius);
+		printf("selected pixels area %g\n", du::sum<bool,double>(px_choice_map));
+		printf("compactness %g\n", compactness);
+		printf("selected pixels factor %g\n", selected_signal_factor);
+		printf("modified loop_gain %g\n", modified_loop_gain);
+		
+		du::multiply_inplace(selected_pixels, modified_loop_gain);
+	} else {
+		du::multiply_inplace(selected_pixels, loop_gain);
+	}
 	selected_px_fft = fft(selected_pixels);
 
 	current_convolved = du::real_part(ifft(du::multiply(selected_px_fft, psf_fft)));

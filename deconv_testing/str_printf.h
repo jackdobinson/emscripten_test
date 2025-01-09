@@ -1,6 +1,7 @@
 #ifndef __STR_PRINTF_INCLUDED__
 #define __STR_PRINTF_INCLUDED__
 
+#include <cstdint>
 #include <string>
 #include <cstdarg>
 #include <iostream>
