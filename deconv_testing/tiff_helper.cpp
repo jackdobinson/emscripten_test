@@ -216,8 +216,8 @@ bool TIFF_uses_tiles(TIFF* tptr){
 
 
 std::vector<double> TIFF_read_strips(TIFF* tptr){
-	// TIFFTAG_PLANARCONFIG = 1 then colour channels stored per pixel (i.e. each strip has {p1(RGB), p2(RGB),...}
-	//                      = 2 then colour channels stored per strip (i.e. strip1={R R ...} strip2={G G ...} strip3={B B ...})
+	// TIFFTAG_PLANARCONFIG = 1 then colour channels stored per pixel (i.e., each strip has {p1(RGB), p2(RGB),...}
+	//                      = 2 then colour channels stored per strip (i.e., strip1={R R ...} strip2={G G ...} strip3={B B ...})
 	//GET_LOGGER;
 	uint16_t planar_config;
 	if (! TIFFGetField(tptr, TIFFTAG_PLANARCONFIG, &planar_config)){

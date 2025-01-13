@@ -2,7 +2,7 @@
 
 
 // TODO: 
-// * Document quirks, e.g. centering is around 1st pixel when convolving
+// * Document quirks, e.g., centering is around 1st pixel when convolving
 FourierTransformer::FourierTransformer(
 		const std::vector<size_t>& _shape,
 		const bool _inverse,

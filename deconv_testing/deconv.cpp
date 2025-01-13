@@ -15,10 +15,10 @@ using namespace emscripten;
 
 // TODO:
 // * Move into it's own file
-// * Can I make this more generic, i.e. can I write to a named canvas?
+// * Can I make this more generic, i.e., can I write to a named canvas?
 // * Can I expose a set of "data sources" from CleanModifiedAlgorithm, create
 //   a load of these functions as "data representers", then associate "data sources"
-//   with "data representers" on the JS side? I.e. C++ give JS a handle to some raw
+//   with "data representers" on the JS side? i.e., C++ give JS a handle to some raw
 //   data. JS (or here) has functions that display raw data. I associate raw data
 //   handles with display functions on JS side. C++ side updates raw data, JS side
 //   periodically calls display functions.

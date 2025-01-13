@@ -698,7 +698,7 @@ namespace data_utils{
 
 	template <class T>
 	std::vector<T>& shift_inplace(std::vector<T>& a, size_t n){
-		// shift vector along e.g. {1,2,3,4} -> {2,3,4,1}
+		// shift vector along e.g., {1,2,3,4} -> {2,3,4,1}
 		std::vector<T> temp(n);
 		size_t i;
 
@@ -835,7 +835,7 @@ namespace data_utils{
 	
 	template <class T, class U, class V>
 	std::vector<T>& shift_inplace(std::vector<T>& a, const std::vector<U>& shape, const std::vector<V>& shift){
-		// shift n-dimensional array along e.g. 
+		// shift n-dimensional array along e.g., 
 		// /1,2,3,4\ --> /2,3,4,1\
 		// \5,6,7,8/     \6,7,8,5/
 		GET_LOGGER;
