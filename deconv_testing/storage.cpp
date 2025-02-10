@@ -4,6 +4,8 @@ namespace Storage {
 
 	std::map<const std::string, Image> images;
 	std::map<const std::string, FileLike> filelikes;
+	
+	std::map<const std::string, std::list<std::function<void()>>> deconv_task_buffers;
 
 	std::map<const std::string, std::vector<std::byte>> named_blobs;
 	

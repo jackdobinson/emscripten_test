@@ -7,6 +7,7 @@
 
 enum class PixelFormatId{
 	GREYSCALE,
+	RGB,
 	RGBA
 };
 
@@ -24,14 +25,15 @@ struct PixelFormat{
 	std::vector<ChannelName> channel_names;
 };
 
-
-static const PixelFormat GreyscalePixelFormat(PixelFormatId::GREYSCALE, 1, {ChannelName::BRIGHTNESS});
-static const PixelFormat RGBAPixelFormat(PixelFormatId::GREYSCALE, 4, {ChannelName::RED, ChannelName::GREEN, ChannelName::BLUE, ChannelName::ALPHA});
+// Internal image format is ALWAYS {R,R,R, ..., G,G,G, ..., B,B,B,...}
+extern const PixelFormat GreyscalePixelFormat;
+extern const PixelFormat RGBPixelFormat;
+extern const PixelFormat RGBAPixelFormat;
 
 
 struct Image{
-	std::vector<size_t> shape;
-	std::vector<double> data;
+	std::vector<size_t> shape; // x, y, z
+	std::vector<double> data; // XXX... | RRR...GGG...BBB... | RRR...GGG...BBB...AAA...
 	PixelFormat pxfmt;
 };
 

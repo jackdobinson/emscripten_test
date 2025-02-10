@@ -163,6 +163,30 @@ void prepare_deconvolver(
 	Image& sci_image = Storage::images[sci_image_name];
 	Image& psf_image = Storage::images[psf_image_name];
 
+	std::list<std::function<void()>> deconv_task_buffer = Storage::deconv_task_buffers[deconv_name];
+
+	deconv_task_buffer.clear();
+	
+	
+	deconv_task_buffer.push_back(
+		std::bind(
+			&CleanModifiedAlgorithm::prepare_observations,
+			&deconvolver,
+			sci_image.data,
+			sci_image.shape,
+			psf_image.data,
+			psf_image.shape,
+			run_tag
+		)
+	);
+	deconv_task_buffer.push_back(
+		std::bind(
+			&CleanModifiedAlgorithm::run,
+			&deconvolver
+		)
+	);
+
+	/*
 	deconvolver.prepare_observations(
 		sci_image.data,
 		sci_image.shape,
@@ -170,6 +194,7 @@ void prepare_deconvolver(
 		psf_image.shape,
 		run_tag
 	);
+	*/
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }
@@ -182,9 +207,13 @@ void run_deconvolver(
 	// get deconvolver
 	// Only one type for now, so use that
 	
-	CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
+	std::list<std::function<void()>> deconv_task_buffer = Storage::deconv_task_buffers[deconv_name];
+	for(auto& task : deconv_task_buffer){
+		task();
+	}
 	
-	deconvolver.run();
+	//CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
+	//deconvolver.run();
 
 	//const std::span<std::byte>& temp = image_as_blob(deconvolver.BLOB_ID_CLEAN_MAP, deconvolver.clean_map);
 	//LOG_DEBUG("sending clean_map to debug canvas");
@@ -239,7 +268,9 @@ emscripten::val get_tiff(
 		raw_data = du::reshape(deconv.residual_data, deconv.data_shape, raw_data_shape); 
 	}
 
-	const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, raw_data);
+	const PixelFormat& pixel_format = Storage::images[original_file_name].pxfmt;
+
+	const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, raw_data, pixel_format);
 	
 	return emscripten::val(emscripten::typed_memory_view(tiff_data.size(), tiff_data.data()));
 
@@ -277,67 +308,8 @@ double get_data_max(
 	throw std::runtime_error("Unknown file id");
 }
 
-
-
 int main(int argc, char** argv){
-	INIT_LOGGING("DEBUG");
-	GET_LOGGER;
-	
-	// Return here if we don't want to run the test bits
 	return 0;
-
-	
-	// Use this to test the routines
-	//assert(argc == 3);
-
-	//std::string input_fpath(argv[1]);
-	//std::string PSF_fpath(argv[2]);
-
-	std::string input_fpath="image";
-	std::string PSF_fpath="psf";
-
-	
-	LOGV_DEBUG(input_fpath);
-	std::vector<double> img_data;
-	std::vector<int> img_shape;
-	DUMMY_load_data(input_fpath, img_data, img_shape);
-	LOGV_DEBUG(img_data.size());
-	LOGV_DEBUG(img_shape);
-
-	LOGV_DEBUG(PSF_fpath);
-	std::vector<double> psf_data;
-	std::vector<int> psf_shape;
-	DUMMY_load_data(PSF_fpath, psf_data, psf_shape);
-	LOGV_DEBUG(psf_data.size());
-	LOGV_DEBUG(psf_shape);
-
-	emscripten_sleep(100);
-	
-	//du::write_as_image("./obs_img.pgm", img_data, img_shape);
-	//du::write_as_image("./psf_img.pgm", psf_data, psf_shape);
-
-	LOG_DEBUG("Creating deconvolver");
-	CleanModifiedAlgorithm deconv_algorithm(100);
-	
-	emscripten_sleep(100);
-
-	LOG_DEBUG("Printing deconvolver parameters");
-	deconv_algorithm.__str__();
-
-	emscripten_sleep(100);
-
-	LOG_DEBUG("Running deconvolver");
-	deconv_algorithm.prepare_observations(
-		img_data,
-		du::as_type<size_t>(img_shape), 
-		psf_data, 
-		du::as_type<size_t>(psf_shape)
-	);
-	
-	deconv_algorithm.run();
-	
-
-
 }
 
 void set_deconvolver_parameters(

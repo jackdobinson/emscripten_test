@@ -83,6 +83,21 @@ fi
 set -o nounset
 
 
+#####################################################
+## Checking Directory Structure For Required Files ##
+#####################################################
+declare -A required_directories=(
+	[./lib]="Contains required libraries, if not present run './build_deps.sh' to create."
+	[./include]="Contains header files for libraries, should already exist in repository. "
+)
+
+for req_dir in "${!required_directories[@]}"; do
+	if [ ! -d "${req_dir}" ]; then 
+		echo "ERROR: missing directory '${req_dir}'. ${required_directories[${req_dir}]}"
+		exit 1
+	fi
+done
+
 ############################
 # Perform build operations #
 ############################

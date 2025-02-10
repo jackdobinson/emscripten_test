@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <string_view>
+#include <span>
 
 //#include <iostream>
 #include "Eigen/Dense"
@@ -138,10 +139,10 @@ class CleanModifiedAlgorithm {
 	);
 	
 	void prepare_observations(
-		const std::vector<double>& obs_data, 
-		const std::vector<size_t>& obs_shape, 
-		const std::vector<double>& psf_data, 
-		const std::vector<size_t>& psf_shape,
+		const std::span<double> obs_data, 
+		const std::span<size_t> obs_shape, 
+		const std::span<double> psf_data, 
+		const std::span<size_t> psf_shape,
 		const std::string& run_tag=""
 	);
 	

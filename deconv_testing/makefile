@@ -37,7 +37,7 @@ comma:= ,
 
 #CXXFLAGS=-O3 $(LDIRS) $(IDIRS) -lcfitsio -lfftw3 -lm -lnetpbm -std=gnu++20 -Wshadow
 CXXFLAGS=                       \
-	-D LOGGING_ENABLED=false     \
+	-D LOGGING_ENABLED=true     \
 	-sASYNCIFY                  \
 	-sASSERTIONS=2              \
 	-sSTACK_OVERFLOW_CHECK=2    \
@@ -67,7 +67,7 @@ CXXFLAGS=                       \
 #	-fexceptions                \
 
 deconv.js : *.cpp *.h *.hpp
-	$(CXX) file_like.cpp deconv.cpp str_printf.cpp data_utils.cpp fft.cpp storage.cpp tiff_helper.cpp main.cpp -o deconv.js $(CXXFLAGS)
+	$(CXX) image.cpp file_like.cpp deconv.cpp str_printf.cpp data_utils.cpp fft.cpp storage.cpp tiff_helper.cpp main.cpp -o deconv.js $(CXXFLAGS)
 
 clean:
 	rm -f deconv.js

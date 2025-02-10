@@ -1,6 +1,9 @@
 #ifndef __STORAGE_INCLUDED__
 #define __STORAGE_INCLUDED__
 
+#include <map>
+#include <list>
+#include <functional>
 #include <vector>
 #include <span>
 #include "image.hpp"
@@ -14,6 +17,8 @@ namespace Storage{
 
 	extern std::map<const std::string, Image> images;
 	extern std::map<const std::string, FileLike> filelikes;
+	
+	extern std::map<const std::string, std::list<std::function<void()>>> deconv_task_buffers;
 	
 	
 	extern std::map<const std::string, std::vector<std::byte>> named_blobs; // store named blobs here

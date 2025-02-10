@@ -55,7 +55,7 @@ std::span<R> image_as_blob(
 	assert(image_data.size() == size_of_image_data);
 
 	switch (input_pixel_format.id) {
-		case PixelFormatId::GREYSCALE :{
+		case PixelFormatId::GREYSCALE :{ // input pixels {XXX...}
 			size_t j=0;
 			for (size_t i=0; i< a.size(); ++i){
 				j = 4*i;
@@ -67,16 +67,35 @@ std::span<R> image_as_blob(
 			}
 			break;
 		}
-
-		case PixelFormatId::RGBA :{
+		case PixelFormatId::RGB :{ // input pixels {RRR...GGG...BBB...}
+			size_t j = 0;
+			size_t k = 0;
+			for (k=0;k<3;++k){
+				for (size_t i=0; i < a.size()/3; ++i){
+					j = 4*i+k;
+					image_data[j] = (std::byte)(round_to<uint8_t>(stretch_range(a[a.size()/3*k + i], min, max, 0.0, 255.0)));
+				}
+			}
+			k = 3;
+			for (size_t i=0; i < a.size()/3; ++i){
+				j = 4*i+k;
+				image_data[j+k] = (std::byte)(255);
+			}
+			break;
+		}
+		case PixelFormatId::RGBA :{ // input pixels {RRR...GGG...BBB...AAA...}
+			size_t j=0;
+			size_t k=0;
 			for (size_t i=0; i < a.size(); ++i){
-				image_data[i] = (std::byte)(round_to<uint8_t>(stretch_range(a[i], min, max, 0.0, 255.0)));
+				j = (i%4)*a.size()/4;
+				k = i%(a.size()/4);
+				image_data[i] = (std::byte)(round_to<uint8_t>(stretch_range(a[j+k], min, max, 0.0, 255.0)));
 			}
 			break;
 		}
 
 		default:{
-			LOG_ERROR("Unknown pixel format id");
+			std::cerr << "Unknown pixel format id" << std::endl;
 			std::exit(EXIT_FAILURE);
 			break;
 		}

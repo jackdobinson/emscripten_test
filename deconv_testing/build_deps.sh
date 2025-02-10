@@ -1,12 +1,26 @@
 
 set -o errexit -o pipefail -o nounset
 
-
+repos_dir="${REPOS_DIR:-"${HOME}/repos"}"
+emscripten_repo="${repos_dir}/emsdk"
 THIS_DIR=$(readlink -f $(dirname ${BASH_SOURCE}))
 THIS_PREFIX="$(readlink -f ${THIS_DIR})"
 THIS_INCLUDE_DIR="$(readlink -f ${THIS_DIR}/include)"
 THIS_LIB_DIR="$(readlink -f ${THIS_DIR}/lib)"
 THIS_ARCHIVE_DIR="$(readlink -f ${THIS_DIR}/archive)"
+
+
+##############################
+# Activate emsdk environment #
+##############################
+
+set +o nounset
+if [[ -z "${EMSDK}" ]]; then
+	export EMSDK_QUIET=1 # suppress EMSDK source output
+	source ${emscripten_repo}/emsdk_env.sh
+fi
+set -o nounset
+
 
 mkdir -p ${THIS_INCLUDE_DIR} ${THIS_LIB_DIR} ${THIS_ARCHIVE_DIR}
 

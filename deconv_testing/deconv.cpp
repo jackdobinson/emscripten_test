@@ -751,15 +751,22 @@ bool CleanModifiedAlgorithm::doIter(
 }
 
 void CleanModifiedAlgorithm::prepare_observations(
-		const std::vector<double>& input_obs_data, 
-		const std::vector<size_t>& input_obs_shape, 
-		const std::vector<double>& input_psf_data, 
-		const std::vector<size_t>& input_psf_shape,
+		const std::span<double> _input_obs_data, 
+		const std::span<size_t> _input_obs_shape, 
+		const std::span<double> _input_psf_data, 
+		const std::span<size_t> _input_psf_shape,
 		const std::string& run_tag
 	){
 	GET_LOGGER;
 	LOG_DEBUG("declare variables");
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
+	
+	const std::vector<double> input_obs_data(std::cbegin(_input_obs_data), std::cend(_input_obs_data));
+	const std::vector<size_t> input_obs_shape(std::cbegin(_input_obs_shape), std::cend(_input_obs_shape));
+	const std::vector<double> input_psf_data(std::cbegin(_input_psf_data), std::cend(_input_psf_data));
+	const std::vector<size_t> input_psf_shape(std::cbegin(_input_psf_shape), std::cend(_input_psf_shape));
+	
+	
 	
 	tag=run_tag;
 	data_shape_adjustment.resize(input_obs_shape.size());
