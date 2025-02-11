@@ -40,19 +40,24 @@ TIFF_PixelInfo::TIFF_PixelInfo(TIFF* tptr){
 		puts("Error: Could not determine photometric interpretation for TIFF file. Exiting...");
 		std::exit(EXIT_FAILURE);
 	}
+	LOGV_DEBUG(photometric_interpretation);
 	
 	if (! TIFFGetField(tptr, TIFFTAG_PLANARCONFIG, &planar_config)){
 		puts("Warning: Could not determine planar configuration for TIFF file. Assuming 1 (Chunky format)");
 		planar_config = 1;
 	}
+	LOGV_DEBUG(planar_config);
 	
 	if (! TIFFGetField(tptr, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel)){
 		puts("Warning: Could not determine samples_per_pixel for TIFF file. Assuming 1");
 		samples_per_pixel = 1;
 	}
+	LOGV_DEBUG(samples_per_pixel);
 	
 	uses_strips = TIFF_uses_strips(tptr);
 	uses_tiles = TIFF_uses_tiles(tptr);
+	
+	LOGV_DEBUG(uses_strips, uses_tiles);
 	
 	bits_per_sample.resize(samples_per_pixel);
 	sample_format.resize(samples_per_pixel);
@@ -64,23 +69,105 @@ TIFF_PixelInfo::TIFF_PixelInfo(TIFF* tptr){
 		for(auto& item : bits_per_sample){
 			item = 1;
 		}
+	} else {
+		bool fix_no_repeat_flag = false;
+		uint16_t v=0;
+		for(int i=0;i<samples_per_pixel;++i){
+			if (bits_per_sample[i] == 0){
+				fix_no_repeat_flag = true;
+			} else {
+				v = bits_per_sample[i];
+			}
+		}
+		if (fix_no_repeat_flag){
+			for(int i=0;i<samples_per_pixel;++i){
+				bits_per_sample[i] = v;
+			}
+		}
 	}
+	LOGV_DEBUG(bits_per_sample);
+	
 	if (! TIFFGetField(tptr, TIFFTAG_SAMPLEFORMAT, sample_format.data())){
 		puts("Warning: Could not determine sample_format for TIFF file. Assuming 1 (unsigned integer)");
 		for(auto& item : sample_format){
 			item = 1;
 		}
+	} else {
+		bool fix_no_repeat_flag = false;
+		uint16_t v=0;
+		for(int i=0;i<samples_per_pixel;++i){
+			if (sample_format[i] == 0){
+				fix_no_repeat_flag = true;
+			} else {
+				v = sample_format[i];
+			}
+		}
+		if (fix_no_repeat_flag){
+			for(int i=0;i<samples_per_pixel;++i){
+				sample_format[i] = v;
+			}
+		}
 	}
+	LOGV_DEBUG(sample_format);
+	
 	if (! TIFFGetField(tptr, TIFFTAG_SMINSAMPLEVALUE, min_sample_value.data())){
 		puts("Warning: Could not determine min_sample_value for TIFF file, setting to 0");
 		for (int i=0; i< samples_per_pixel; ++i){
 			min_sample_value[i] = 0;
 		}
+	} else {
+		bool fix_no_repeat_flag = false;
+		double v=0;
+		for(int i=0;i<samples_per_pixel;++i){
+			if (min_sample_value[i] == 0){
+				fix_no_repeat_flag = true;
+			} else {
+				v = min_sample_value[i];
+			}
+		}
+		if (fix_no_repeat_flag){
+			for(int i=0;i<samples_per_pixel;++i){
+				min_sample_value[i] = v;
+			}
+		}
 	}
+	LOGV_DEBUG(min_sample_value);
+	
 	if (! TIFFGetField(tptr, TIFFTAG_SMAXSAMPLEVALUE, max_sample_value.data())){
 		puts("Warning: Could not determine max_sample_value for TIFF file, setting to 1");
 		for (int i=0; i< samples_per_pixel; ++i){
 			max_sample_value[i] = 1;
+		}
+	} else {
+		bool fix_no_repeat_flag = false;
+		double v=0;
+		for(int i=0;i<samples_per_pixel;++i){
+			if (max_sample_value[i] == 0){
+				fix_no_repeat_flag = true;
+			} else {
+				v = max_sample_value[i];
+			}
+		}
+		if (fix_no_repeat_flag){
+			for(int i=0;i<samples_per_pixel;++i){
+				max_sample_value[i] = v;
+			}
+		}
+	}
+	LOGV_DEBUG(max_sample_value);
+	
+	// Throw out error messages for unsupported formats
+	//if (samples_per_pixel > 1){
+	//	std::cerr << "Error: More than one sample per pixel not supported yet. " << samples_per_pixel << " > 1. Exiting..." << std::endl;
+	//	std::exit(EXIT_FAILURE);
+	//}
+	
+	for (int i=0;i<samples_per_pixel;++i){
+		if(	(bits_per_sample[i] != 8)
+			&& (bits_per_sample[i] != 16)
+		){
+			std::cerr << "Error: Only 8 or 16 bits per sample currently supported " << i << "th channel has " << bits_per_sample[i] <<" bits per sample"<<std::endl;
+			std::exit(EXIT_FAILURE);
 		}
 	}
 }
@@ -223,67 +310,305 @@ bool TIFF_uses_tiles(TIFF* tptr){
 }
 
 
-std::vector<double> TIFF_read_strips(TIFF* tptr, TIFF_PixelInfo& tiff_pixel_info){
+std::vector<std::byte> TIFF_get_bytes_from_strips(
+		TIFF* tptr,
+		TIFF_PixelInfo& tiff_pixel_info,
+		TIFF_ImageShape& tiff_image_shape,
+		TIFF_StripInfo& tiff_strip_info
+	){
+	GET_LOGGER;
+	
+	size_t n_bytes_to_read = tiff_image_shape.width * tiff_image_shape.height * (du::sum(tiff_pixel_info.bits_per_sample)/8);
+	LOGV_DEBUG(n_bytes_to_read);
+	
+	std::vector<std::byte> raw(n_bytes_to_read);
+
+	size_t n_bytes_read = 0;
+	for(size_t i=0; i<tiff_strip_info.n_strips; ++i){
+		n_bytes_read += TIFFReadEncodedStrip(
+			tptr, 
+			i, 
+			&(raw[n_bytes_read]), 
+			(n_bytes_to_read - n_bytes_read) < tiff_strip_info.strip_size ? (n_bytes_to_read - n_bytes_read) : tiff_strip_info.strip_size
+		);
+	}
+	
+	return raw;
+}
+
+void TIFF_read_packed_strips_to_image(
+		Image& image,
+		TIFF* tptr, 
+		TIFF_PixelInfo& tiff_pixel_info
+	){
+	GET_LOGGER;
+	LOG_DEBUG("");
+	TIFF_ImageShape tiff_image_shape(tptr);
+	TIFF_StripInfo tiff_strip_info(tptr);
+	
+	// raw data is RGB,RGB,RGB,...
+	// want to output RRR...,GGG...,BBB...
+	std::vector<std::byte> raw = TIFF_get_bytes_from_strips(
+		tptr,
+		tiff_pixel_info,
+		tiff_image_shape,
+		tiff_strip_info
+	);
+	
+	size_t layer_stride = tiff_image_shape.width * tiff_image_shape.height;
+	size_t raw_idx = 0;
+	for (int i=0; i<tiff_pixel_info.samples_per_pixel; ++i){
+		for(int j=0; j<layer_stride; ++j){
+			raw_idx = (tiff_pixel_info.samples_per_pixel*j + i)*(tiff_pixel_info.bits_per_sample[0]/8); // Should alter this in case we can have different number of bits per sample
+			//LOGV_DEBUG(raw_idx, raw.size());
+			switch (tiff_pixel_info.sample_format[i]) {
+				case 1:
+					switch (tiff_pixel_info.bits_per_sample[i]) {
+						case 8: {// uint8_t
+							//LOG_DEBUG("Reading Uint8");
+							uint8_t* raw_type_ptr = (uint8_t*)(&(raw[raw_idx]));
+							image.copy_from<uint8_t>(
+								raw_type_ptr, 
+								1, 
+								[&tiff_pixel_info, i](const uint8_t* p){
+									return stretch_range<double>(
+										1.0*(*p), 
+										1.0*0, 
+										1.0*255, 
+										1.0*tiff_pixel_info.min_sample_value[i], 
+										1.0*tiff_pixel_info.max_sample_value[i]
+									);
+								}
+							);
+							//data = TIFF_read_strips_to_double<uint8_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, 0.0, 255.0);
+							break;
+						}
+						case 16: {// uint16_t
+							//LOG_DEBUG("Reading Uint16");
+							uint16_t* raw_type_ptr = (uint16_t*)(&(raw[raw_idx]));
+							image.copy_from<uint16_t>(
+								raw_type_ptr, 
+								1,
+								[&tiff_pixel_info, i](const uint16_t* p){
+									return stretch_range<double>(
+										1.0*(*p), 
+										1.0*0, 
+										1.0*65535, 
+										1.0*tiff_pixel_info.min_sample_value[i], 
+										1.0*tiff_pixel_info.max_sample_value[i]
+									);
+								}
+							);
+							//data = TIFF_read_strips_to_double<uint16_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, 0.0, 65535.0);
+							break;
+						}
+					}
+					break;
+				case 2:
+					switch (tiff_pixel_info.bits_per_sample[i]) {
+						case 8: {// int8_t
+							//LOG_DEBUG("Reading Int8");
+							int8_t* raw_type_ptr = (int8_t*)(&(raw[raw_idx]));
+							image.copy_from<int8_t>(
+								raw_type_ptr, 
+								1,
+								[&tiff_pixel_info, i](const int8_t* p){
+									return stretch_range<double>(
+										1.0*(*p), 
+										1.0*-128, 
+										1.0*127, 
+										1.0*tiff_pixel_info.min_sample_value[i], 
+										1.0*tiff_pixel_info.max_sample_value[i]
+									);
+								}
+							);
+							//data = TIFF_read_strips_to_double<int8_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, -128., 127.);
+							break;
+						}
+						case 16: {// int16_t
+							//LOG_DEBUG("Reading Int16");
+							int16_t* raw_type_ptr = (int16_t*)(&(raw[raw_idx]));
+							image.copy_from<int16_t>(
+								raw_type_ptr, 
+								1,
+								[&tiff_pixel_info, i](const int16_t* p){
+									return stretch_range<double>(
+										1.0*(*p), 
+										1.0*-32768, 
+										1.0*32767, 
+										1.0*tiff_pixel_info.min_sample_value[i], 
+										1.0*tiff_pixel_info.max_sample_value[i]
+									);
+								}
+							);
+							//data = TIFF_read_strips_to_double<int16_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, -32768., 32767.);
+							break;
+						}
+					}
+					break;
+				case 3: // double
+					switch (tiff_pixel_info.bits_per_sample[i]){
+						default:
+							//data = TIFF_read_strips_to_double<double>(tptr, n_strips, strip_size, planar_config, samples_per_pixel);
+							puts("Error: Sample format 'double' for TIFF file not supported yet. Exiting...");
+							std::exit(EXIT_FAILURE);
+					}
+					break;
+				default:
+					std::cerr << "Error: Unsupported sample format " << tiff_pixel_info.sample_format[0] << " for TIFF file. Exiting..." << std::endl;
+					std::exit(EXIT_FAILURE);
+			}
+		}
+	}
+}
+
+void TIFF_read_layered_strips_to_image(
+		Image& image,
+		TIFF* tptr, 
+		TIFF_PixelInfo& tiff_pixel_info
+	){
+	GET_LOGGER;
+	
+	TIFF_ImageShape tiff_image_shape(tptr);
+	TIFF_StripInfo tiff_strip_info(tptr);
+	
+	std::vector<std::byte> raw = TIFF_get_bytes_from_strips(
+		tptr,
+		tiff_pixel_info,
+		tiff_image_shape,
+		tiff_strip_info
+	);
+	
+	
+	size_t layer_stride = tiff_image_shape.width * tiff_image_shape.height;
+	size_t raw_idx = 0;
+	for (int i=0; i<tiff_pixel_info.samples_per_pixel; ++i){
+		raw_idx = layer_stride*i*(tiff_pixel_info.bits_per_sample[0]/8);
+		switch (tiff_pixel_info.sample_format[i]) {
+			case 1:
+				switch (tiff_pixel_info.bits_per_sample[i]) {
+					case 8: {// uint8_t
+						LOG_DEBUG("Reading Uint8");
+						uint8_t* raw_type_ptr = (uint8_t*)(&(raw[raw_idx]));
+						image.copy_from<uint8_t>(
+							raw_type_ptr, 
+							layer_stride, 
+							[&tiff_pixel_info, i](const uint8_t* p){
+								return stretch_range<double>(
+									1.0*(*p), 
+									1.0*0, 
+									1.0*255, 
+									1.0*tiff_pixel_info.min_sample_value[i], 
+									1.0*tiff_pixel_info.max_sample_value[i]
+								);
+							}
+						);
+						//data = TIFF_read_strips_to_double<uint8_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, 0.0, 255.0);
+						break;
+					}
+					case 16: {// uint16_t
+						LOG_DEBUG("Reading Uint16");
+						uint16_t* raw_type_ptr = (uint16_t*)(&(raw[raw_idx]));
+						image.copy_from<uint16_t>(
+							raw_type_ptr, 
+							layer_stride,
+							[&tiff_pixel_info, i](const uint16_t* p){
+								return stretch_range<double>(
+									1.0*(*p), 
+									1.0*0, 
+									1.0*65535, 
+									1.0*tiff_pixel_info.min_sample_value[i], 
+									1.0*tiff_pixel_info.max_sample_value[i]
+								);
+							}
+						);
+						//data = TIFF_read_strips_to_double<uint16_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, 0.0, 65535.0);
+						break;
+					}
+				}
+				break;
+			case 2:
+				switch (tiff_pixel_info.bits_per_sample[i]) {
+					case 8: {// int8_t
+						LOG_DEBUG("Reading Int8");
+						int8_t* raw_type_ptr = (int8_t*)(&(raw[raw_idx]));
+						image.copy_from<int8_t>(
+							raw_type_ptr, 
+							layer_stride,
+							[&tiff_pixel_info, i](const int8_t* p){
+								return stretch_range<double>(
+									1.0*(*p), 
+									1.0*-128, 
+									1.0*127, 
+									1.0*tiff_pixel_info.min_sample_value[i], 
+									1.0*tiff_pixel_info.max_sample_value[i]
+								);
+							}
+						);
+						//data = TIFF_read_strips_to_double<int8_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, -128., 127.);
+						break;
+					}
+					case 16: { // int16_t
+						LOG_DEBUG("Reading Int16");
+						int16_t* raw_type_ptr = (int16_t*)(&(raw[raw_idx]));
+						image.copy_from<int16_t>(
+							raw_type_ptr, 
+							layer_stride,
+							[&tiff_pixel_info, i](const int16_t* p){
+								return stretch_range<double>(
+									1.0*(*p), 
+									1.0*-32768, 
+									1.0*32767, 
+									1.0*tiff_pixel_info.min_sample_value[i], 
+									1.0*tiff_pixel_info.max_sample_value[i]
+								);
+							}
+						);
+						//data = TIFF_read_strips_to_double<int16_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, -32768., 32767.);
+						break;
+					}
+				}
+				break;
+			case 3: // double
+				switch (tiff_pixel_info.bits_per_sample[i]){
+					default:
+						//data = TIFF_read_strips_to_double<double>(tptr, n_strips, strip_size, planar_config, samples_per_pixel);
+						puts("Error: Sample format 'double' for TIFF file not supported yet. Exiting...");
+						std::exit(EXIT_FAILURE);
+				}
+				break;
+			default:
+				std::cerr << "Error: Unsupported sample format " << tiff_pixel_info.sample_format[0] << " for TIFF file. Exiting..." << std::endl;
+				std::exit(EXIT_FAILURE);
+		}
+	}
+}
+
+void TIFF_read_strips_to_image(
+		Image& image,
+		TIFF* tptr, 
+		TIFF_PixelInfo& tiff_pixel_info
+	){
 	// TIFFTAG_PLANARCONFIG = 1 then colour channels stored per pixel (i.e., each strip has {p1(RGB), p2(RGB),...}
 	//                      = 2 then colour channels stored per strip (i.e., strip1={R R ...} strip2={G G ...} strip3={B B ...})
 	GET_LOGGER;
 	TIFF_StripInfo tiff_strip_info(tptr);
 	
-	// Throw out error messages for unsupported formats
-	if (tiff_pixel_info.samples_per_pixel > 1){
-		std::cerr << "Error: More than one sample per pixel not supported yet. " << tiff_pixel_info.samples_per_pixel << " > 1. Exiting..." << std::endl;
-		std::exit(EXIT_FAILURE);
-	}
-	
-	if(	(tiff_pixel_info.bits_per_sample[0] != 8)
-		|| (tiff_pixel_info.bits_per_sample[0] != 16)
-	){
-		puts("Error: Only 8 or 16 bits per sample currently supported");
-		std::exit(EXIT_FAILURE);
-	}
-	
+	// Internally, always store as layers. RRR...GGG...BBB...
+	image.init_write(); 
 
-	std::vector<double> data;
 
-	switch (tiff_pixel_info.sample_format[0]) {
-		case 1:
-			switch (tiff_pixel_info.bits_per_sample[0]) {
-				case 8:
-					LOG_DEBUG("Reading Uint8");
-					data = TIFF_read_strips_to_double<uint8_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, 0.0, 255.0);
-					break;
-				case 16:
-					LOG_DEBUG("Reading Uint16");
-					data = TIFF_read_strips_to_double<uint16_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, 0.0, 65535.0);
-					break;
-			}
+	switch (tiff_pixel_info.planar_config) {
+		case 1: // RGB,RGB,RGB,...
+			TIFF_read_packed_strips_to_image(image, tptr, tiff_pixel_info);
 			break;
-		case 2:
-			switch (tiff_pixel_info.bits_per_sample[0]) {
-				case 8:
-					LOG_DEBUG("Reading Int8");
-					data = TIFF_read_strips_to_double<int8_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, -128., 127.);
-					break;
-				case 16:
-					LOG_DEBUG("Reading Int16");
-					data = TIFF_read_strips_to_double<int16_t>(tptr, tiff_strip_info.n_strips, tiff_strip_info.strip_size, tiff_pixel_info.planar_config, tiff_pixel_info.samples_per_pixel, -32768., 32767.);
-					break;
-			}
-			break;
-		case 3:
-			switch (tiff_pixel_info.bits_per_sample[0]){
-				default:
-					//data = TIFF_read_strips_to_double<double>(tptr, n_strips, strip_size, planar_config, samples_per_pixel);
-					puts("Error: Sample format 'double' for TIFF file not supported yet. Exiting...");
-					std::exit(EXIT_FAILURE);
-			}
+		case 2://RRR...GGG...BBB...
+			TIFF_read_layered_strips_to_image(image, tptr, tiff_pixel_info);
 			break;
 		default:
-			std::cerr << "Error: Unsupported sample format " << tiff_pixel_info.sample_format[0] << " for TIFF file. Exiting..." << std::endl;
+			std::cerr << "Error: Unknown planar config " << tiff_pixel_info.planar_config << " for TIFF file. Exiting..." << std::endl;
 			std::exit(EXIT_FAILURE);
 	}
-	LOGV_DEBUG(data);
-	return data;
 }
 
 
@@ -451,16 +776,26 @@ std::string TIFF_from_js_array(const std::string& name, const emscripten::val& u
 		std::exit(EXIT_FAILURE);
 	}
 
+	
+
 	Storage::images.emplace(
 		std::make_pair(
 			name, 
 			Image(
 				std::vector<size_t>({TIFF_width(tptr), TIFF_height(tptr), tiff_pixel_info.samples_per_pixel}), // x, y, z
-				TIFF_read_strips(tptr, tiff_pixel_info),
+				//TIFF_read_strips(tptr, tiff_pixel_info),
 				std::cref(*image_px_format)
 			)
 		)
 	);
+	
+	Image& image = Storage::images[name];
+	TIFF_read_strips_to_image(
+		image,
+		tptr,
+		tiff_pixel_info
+	);
+	
 
 	TIFF_close(name);
 

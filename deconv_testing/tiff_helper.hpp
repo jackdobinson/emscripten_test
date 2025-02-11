@@ -93,7 +93,31 @@ struct TIFF_ImageShape{
 	TIFF_ImageShape(TIFF* tptr);
 };
 
-std::vector<double> TIFF_read_strips(TIFF* tptr);
+
+void TIFF_read_strips_to_image(
+	Image& image,
+	TIFF* tptr, 
+	TIFF_PixelInfo& tiff_pixel_info
+);
+
+void TIFF_read_packed_strips_to_image(
+	Image& image,
+	TIFF* tptr, 
+	TIFF_PixelInfo& tiff_pixel_info
+);
+
+void TIFF_read_layered_strips_to_image(
+	Image& image,
+	TIFF* tptr, 
+	TIFF_PixelInfo& tiff_pixel_info
+);
+
+std::vector<std::byte> TIFF_get_bytes_from_strips(
+	TIFF* tptr,
+	TIFF_PixelInfo& tiff_pixel_info,
+	TIFF_ImageShape& tiff_image_shape,
+	TIFF_StripInfo& tiff_strip_info
+);
 
 std::string TIFF_from_js_array(const std::string& name, const emscripten::val& uint8_array);
 
@@ -101,7 +125,7 @@ std::string TIFF_from_js_array(const std::string& name, const emscripten::val& u
 template<class T>
 std::vector<T> TIFF_doubles_to_samples_as(
 		const TIFF_PixelInfo& pixel_info, 
-		const std::vector<double>& data,
+		const Image& image,
 		const PixelFormat& pixel_format, 
 		double min_pack_value,
 		double max_pack_value
@@ -120,15 +144,17 @@ std::vector<T> TIFF_doubles_to_samples_as(
 	);
 	LOGV_DEBUG(typeid(T).name());
 	
-	size_t n_samples = pixel_info.samples_per_pixel*data.size();
-	std::vector<T> sample_data(n_samples);
+	
+	std::vector<T> sample_data;
 	LOGV_DEBUG(pixel_info.samples_per_pixel);
 	
 	switch(pixel_format.id){
 	
 		
 		case PixelFormatId::GREYSCALE:{
-		
+			std::vector<double> data = image.data;
+			size_t n_samples = pixel_info.samples_per_pixel*data.size();
+			sample_data.resize(n_samples);
 			switch(pixel_info.planar_config){
 				case 1:{ // RGBA RGBA RGBA ...
 					LOG_DEBUG("Planar config = 1");
@@ -162,18 +188,60 @@ std::vector<T> TIFF_doubles_to_samples_as(
 					exit(EXIT_FAILURE);
 				}
 			}
+			break;
 		}
-		case PixelFormatId::RGB:{
-			puts("Error: RGBPixelFormat pixel format not supported yet. Exiting...");
-			exit(EXIT_FAILURE);
+		case PixelFormatId::RGB:{ // input is RRR...,GGG...,BBB...
+			LOG_DEBUG("PixelFormatId::RGB");
+			size_t layer_size = image.shape[0]*image.shape[1];
+			size_t n_samples = layer_size*3;
+			sample_data.resize(n_samples);
+			switch(pixel_info.planar_config){
+				case 1:{ // RGBA RGBA RGBA ...
+					LOG_DEBUG("Planar config = 1");
+					size_t j=0;
+					for (size_t i=0;i<n_samples; ++i){
+						j = i%3;
+						sample_data[i] = stretch_range<double>(
+							image.data[j*layer_size + i/3],
+							pixel_info.min_sample_value[j],
+							pixel_info.max_sample_value[j],
+							min_pack_value,
+							max_pack_value
+						);
+					}
+					
+					break;
+				}
+				case 2: {// R R R R... G G G G... B B B B... A A A A...
+					LOG_DEBUG("Planar config = 2");
+					for(size_t i=0; i<n_samples; ++i){
+						sample_data[i] = stretch_range<double>(
+							image.data[i],
+							pixel_info.min_sample_value[i/layer_size],
+							pixel_info.max_sample_value[i/layer_size],
+							min_pack_value,
+							max_pack_value
+						);
+					}
+					break;
+				}
+				default: {
+					puts("Error: Unknown planar config value, Exiting...");
+					//LOG_ERROR("Unknown planar config value '%'", pixel_info.planar_config);
+					exit(EXIT_FAILURE);
+				}
+			}
+			break;
 		}
 		case PixelFormatId::RGBA:{
 			puts("Error: RGBAPixelFormat pixel format not supported yet. Exiting...");
 			exit(EXIT_FAILURE);
+			break;
 		}
 		default:{
 			puts("Error: Unknown pixel format. Exiting...");
 			exit(EXIT_FAILURE);
+			break;
 		}
 		
 	}
@@ -201,12 +269,12 @@ void TIFF_write_strips_from(
 	}
 }
 
-template<class T>
+template<class T=double>
 void TIFF_write_strips(
 		TIFF* tptr, 
 		TIFF_LayoutInfo layout_info,
 		TIFF_PixelInfo pixel_info,
-		const std::vector<T>& data, // always greyscale, 1 value per pixel
+		const Image& image, // always greyscale, 1 value per pixel
 		const PixelFormat& pixel_format
 	){
 	GET_LOGGER;
@@ -223,11 +291,11 @@ void TIFF_write_strips(
 			switch (pixel_info.bits_per_sample[0]) {
 				case 8:
 					LOG_DEBUG("Writing Uint8");
-					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<uint8_t>(pixel_info, data, pixel_format, 0.0, 255.0));
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<uint8_t>(pixel_info, image, pixel_format, 0.0, 255.0));
 					break;
 				case 16:
 					LOG_DEBUG("Writing Uint16");
-					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<uint16_t>(pixel_info, data, pixel_format,  0.0, 65535.0));
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<uint16_t>(pixel_info, image, pixel_format,  0.0, 65535.0));
 					break;
 			}
 			break;
@@ -235,11 +303,11 @@ void TIFF_write_strips(
 			switch (pixel_info.bits_per_sample[0]) {
 				case 8:
 					LOG_DEBUG("Writing Int8");
-					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<int8_t>(pixel_info, data, pixel_format,  -128., 127.));
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<int8_t>(pixel_info, image, pixel_format,  -128., 127.));
 					break;
 				case 16:
 					LOG_DEBUG("Writing Int16");
-					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<int16_t>(pixel_info, data, pixel_format,  -32768., 32767.));
+					TIFF_write_strips_from(tptr, layout_info, TIFF_doubles_to_samples_as<int16_t>(pixel_info, image, pixel_format,  -32768., 32767.));
 					break;
 			}
 			break;
@@ -364,11 +432,11 @@ template<class T=double>
 std::span<uint8_t> TIFF_bytes_like(
 		const std::string& original_file_name, 
 		const std::string& file_name,
-		const std::vector<T>& data,
+		const Image& image,
 		const PixelFormat data_pixel_format
 	){
 	GET_LOGGER;
-	LOGV_DEBUG(data.size());
+	LOGV_DEBUG(image.data.size());
 	// Create a TIFF with as much of the same structure as `original_file_name` as possible
 	
 	// Copy original file data to new file
@@ -402,11 +470,11 @@ std::span<uint8_t> TIFF_bytes_like(
 	
 	// update min and max sample values
 	for (size_t i=0; i<pixel_info.samples_per_pixel; ++i){
-		LOGV_DEBUG(du::min(data));
-		LOGV_DEBUG(du::max(data));
-		LOGV_DEBUG(du::sum(data));
-		pixel_info.min_sample_value[i] = du::min(data);
-		pixel_info.max_sample_value[i] = du::max(data);
+		LOGV_DEBUG(du::min(image.data));
+		LOGV_DEBUG(du::max(image.data));
+		LOGV_DEBUG(du::sum(image.data));
+		pixel_info.min_sample_value[i] = du::min(image.data);
+		pixel_info.max_sample_value[i] = du::max(image.data);
 	}
 	
 	
@@ -416,7 +484,7 @@ std::span<uint8_t> TIFF_bytes_like(
 			tptr,
 			layout_info,
 			pixel_info,
-			data,
+			image,
 			data_pixel_format
 		);
 	}

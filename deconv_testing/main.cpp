@@ -27,6 +27,7 @@ emscripten::val image_as_JSImageData(const std::string& name){
 
 	const Image& image = Storage::images[name];
 
+	LOGV_DEBUG(image.shape);
 	LOGV_DEBUG(image.data);
 
 	std::span<uint8_t> image_data = image_as_blob<uint8_t>(name, image.data, image.pxfmt);
@@ -147,7 +148,30 @@ int create_deconvolver(const std::string& deconv_type, const std::string& deconv
 }
 
 
-void prepare_deconvolver(
+void copy_deconv_results_to_layer(
+		const std::string& deconv_type,
+		const std::string& deconv_name,
+		int layer_idx
+	){
+	CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	std::vector<size_t> raw_data_shape = du::subtract(deconv.data_shape, deconv.data_shape_adjustment);
+	std::vector<double> raw_data(du::product(raw_data_shape));
+	
+	std::span<double> layer_span = Storage::images[deconv_name+"_clean_map"].get_span_of_layer(layer_idx);
+	std::vector<double> data = du::reshape(deconv.clean_map, deconv.data_shape, raw_data_shape); 
+	
+	for(size_t i=0; i<data.size(); ++i){
+		layer_span[i] = data[i];
+	}
+	
+	layer_span = Storage::images[deconv_name+"_residual"].get_span_of_layer(layer_idx);
+	data = du::reshape(deconv.residual_data, deconv.data_shape, raw_data_shape); 
+	for(size_t i=0; i<data.size(); ++i){
+		layer_span[i] = data[i];
+	}
+}
+
+emscripten::val prepare_deconvolver(
 		const std::string& deconv_type, 
 		const std::string& deconv_name, 
 		const std::string& sci_image_name, 
@@ -162,30 +186,69 @@ void prepare_deconvolver(
 
 	Image& sci_image = Storage::images[sci_image_name];
 	Image& psf_image = Storage::images[psf_image_name];
+	
+	if (sci_image.shape[2] != psf_image.shape[2]){
+		return emscripten::val("Science and PSF images have different number of colour channels. Cannot deconvolve.");
+	}
+	
+	// Create holders for results of deconvolution
+	Storage::images.erase(deconv_name+"_clean_map");
+	Storage::images.erase(deconv_name+"_residual");
+	Storage::images.emplace(
+		std::make_pair(
+			deconv_name+"_clean_map", 
+			Image(
+				sci_image.shape, // x, y, z
+				sci_image.pxfmt
+			)
+		)
+	);
+	
+	Storage::images.emplace(
+		std::make_pair(
+			deconv_name+"_residual", 
+			Image(
+				sci_image.shape, // x, y, z
+				sci_image.pxfmt
+			)
+		)
+	);
+	
+	
 
-	std::list<std::function<void()>> deconv_task_buffer = Storage::deconv_task_buffers[deconv_name];
-
+	std::list<std::function<void()>>& deconv_task_buffer = Storage::deconv_task_buffers[deconv_name];
+	
+	// Clear task buffer
 	deconv_task_buffer.clear();
 	
-	
-	deconv_task_buffer.push_back(
-		std::bind(
-			&CleanModifiedAlgorithm::prepare_observations,
-			&deconvolver,
-			sci_image.data,
-			sci_image.shape,
-			psf_image.data,
-			psf_image.shape,
-			run_tag
-		)
-	);
-	deconv_task_buffer.push_back(
-		std::bind(
-			&CleanModifiedAlgorithm::run,
-			&deconvolver
-		)
-	);
-
+	// Create new tasks to deconvolve each layer of the input image
+	for(int i=0; i<sci_image.shape[2]; ++i){
+		deconv_task_buffer.push_back(
+			std::bind(
+				&CleanModifiedAlgorithm::prepare_observations,
+				&deconvolver,
+				sci_image.get_span_of_layer(i),
+				sci_image.get_shape_of_layer(i),
+				psf_image.get_span_of_layer(i),
+				psf_image.get_shape_of_layer(i),
+				run_tag
+			)
+		);
+		deconv_task_buffer.push_back(
+			std::bind(
+				&CleanModifiedAlgorithm::run,
+				&deconvolver
+			)
+		);
+		deconv_task_buffer.push_back(
+			std::bind(
+				copy_deconv_results_to_layer,
+				deconv_type,
+				deconv_name,
+				i
+			)
+		);
+	}
 	/*
 	deconvolver.prepare_observations(
 		sci_image.data,
@@ -196,7 +259,7 @@ void prepare_deconvolver(
 	);
 	*/
 	
-	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
+	return emscripten::val("");
 }
 
 void run_deconvolver(
@@ -228,9 +291,10 @@ emscripten::val get_deconvolver_clean_map(
 	){
 	GET_LOGGER;
 	LOG_DEBUG("Sending clean map");
-	CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
+	//CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
 
-	return vector_as_JSImageData(deconvolver.BLOB_ID_CLEAN_MAP, deconvolver.clean_map);
+	//return vector_as_JSImageData(deconvolver.BLOB_ID_CLEAN_MAP, deconvolver.clean_map);
+	return image_as_JSImageData(deconv_name+"_clean_map");
 }
 
 emscripten::val get_deconvolver_residual(
@@ -240,9 +304,10 @@ emscripten::val get_deconvolver_residual(
 	GET_LOGGER;
 	LOG_DEBUG("Sending residual data");
 
-	CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
+	//CleanModifiedAlgorithm& deconvolver = clean_modified_deconvolvers[deconv_name];
 
-	return vector_as_JSImageData(deconvolver.BLOB_ID_RESIDUAL, deconvolver.residual_data);
+	//return vector_as_JSImageData(deconvolver.BLOB_ID_RESIDUAL, deconvolver.residual_data);
+	return image_as_JSImageData(deconv_name+"_residual");
 }
 
 // TODO: 
@@ -255,24 +320,40 @@ emscripten::val get_tiff(
 		const std::string& original_file_name
 	){
 	GET_LOGGER;
+	LOGV_DEBUG(file_id);
 	// Only one deconvolver type right now, therefore skip deconv_type dispatch
-	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
-	LOGV_DEBUG(deconv.data_shape, deconv.data_shape_adjustment);
-	std::vector<size_t> raw_data_shape = du::subtract(deconv.data_shape, deconv.data_shape_adjustment);
-	std::vector<double> raw_data(du::product(raw_data_shape));
+	//const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	//LOGV_DEBUG(deconv.data_shape, deconv.data_shape_adjustment);
+	//std::vector<size_t> raw_data_shape = du::subtract(deconv.data_shape, deconv.data_shape_adjustment);
+	//std::vector<double> raw_data(du::product(raw_data_shape));
 	
-	if (file_id == "deconv.clean_map"){
-		raw_data = du::reshape(deconv.clean_map, deconv.data_shape, raw_data_shape); 
-	}
-	if (file_id == "deconv.residual"){
-		raw_data = du::reshape(deconv.residual_data, deconv.data_shape, raw_data_shape); 
-	}
+	//if (file_id == "deconv.clean_map"){
+	//	raw_data = du::reshape(deconv.clean_map, deconv.data_shape, raw_data_shape); 
+	//}
+	//if (file_id == "deconv.residual"){
+	//	raw_data = du::reshape(deconv.residual_data, deconv.data_shape, raw_data_shape); 
+	//}
 
 	const PixelFormat& pixel_format = Storage::images[original_file_name].pxfmt;
 
-	const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, raw_data, pixel_format);
+	//const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, raw_data, pixel_format);
 	
-	return emscripten::val(emscripten::typed_memory_view(tiff_data.size(), tiff_data.data()));
+	//return emscripten::val(emscripten::typed_memory_view(tiff_data.size(), tiff_data.data()));
+	
+	if (file_id == "deconv.clean_map"){
+		
+		const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, Storage::images[deconv_name+"_clean_map"], pixel_format);
+		return emscripten::val(emscripten::typed_memory_view(tiff_data.size(), tiff_data.data()));
+	}
+	
+	if (file_id == "deconv.residual"){
+		
+		const std::span<uint8_t>& tiff_data = TIFF_bytes_like(original_file_name, original_file_name + file_id, Storage::images[deconv_name+"_residual"], pixel_format);
+		return emscripten::val(emscripten::typed_memory_view(tiff_data.size(), tiff_data.data()));
+	}
+	
+	return emscripten::val(nullptr); // undefined
+	
 
 }
 
@@ -282,12 +363,14 @@ double get_data_min(
 		const std::string& file_id
 	){
 	// Only one deconvolver type right now, therefore skip deconv_type dispatch
-	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	//const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
 	if (file_id == "deconv.clean_map"){
-		return du::min(deconv.clean_map);
+		//return du::min(deconv.clean_map);
+		return du::min(Storage::images[deconv_name+"_clean_map"].data);
 	}
 	if (file_id == "deconv.residual"){
-		return du::min(deconv.residual_data);
+		//return du::min(deconv.residual_data);
+		return du::min(Storage::images[deconv_name+"_residual"].data);
 	}
 	throw std::runtime_error("Unknown file id");
 }
@@ -298,17 +381,20 @@ double get_data_max(
 		const std::string& file_id
 	){
 	// Only one deconvolver type right now, therefore skip deconv_type dispatch
-	const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
+	//const CleanModifiedAlgorithm& deconv = clean_modified_deconvolvers[deconv_name];
 	if (file_id == "deconv.clean_map"){
-		return du::max(deconv.clean_map);
+		//return du::max(deconv.clean_map);
+		return du::max(Storage::images[deconv_name+"_clean_map"].data);
 	}
 	if (file_id == "deconv.residual"){
-		return du::max(deconv.residual_data);
+		//return du::max(deconv.residual_data);
+		return du::max(Storage::images[deconv_name+"_residual"].data);
 	}
 	throw std::runtime_error("Unknown file id");
 }
 
 int main(int argc, char** argv){
+	INIT_LOGGING("DEBUG");
 	return 0;
 }
 

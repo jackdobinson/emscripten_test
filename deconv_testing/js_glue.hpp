@@ -35,8 +35,8 @@ std::span<R> image_as_blob(
 
 	std::string image_name = name + name_tag;
 
-	//LOGV_DEBUG(image_name, a, input_pixel_format.channels_per_pixel);
-	//LOGV_DEBUG(a.size());
+	LOGV_DEBUG(image_name, a, input_pixel_format.channels_per_pixel);
+	LOGV_DEBUG(a.size());
 	
 	
 	T min = a[0], max=a[0];
@@ -51,11 +51,12 @@ std::span<R> image_as_blob(
 	Storage::named_blobs[image_name] = std::vector<std::byte>(size_of_image_data);
 	std::vector<std::byte>& image_data = Storage::named_blobs[image_name];
 
-	//LOGV_DEBUG(image_data.size(), size_of_image_data);
+	LOGV_DEBUG(image_data.size(), size_of_image_data);
 	assert(image_data.size() == size_of_image_data);
 
 	switch (input_pixel_format.id) {
 		case PixelFormatId::GREYSCALE :{ // input pixels {XXX...}
+			LOG_DEBUG("PixelFormatId::GREYSCALE");
 			size_t j=0;
 			for (size_t i=0; i< a.size(); ++i){
 				j = 4*i;
@@ -68,22 +69,30 @@ std::span<R> image_as_blob(
 			break;
 		}
 		case PixelFormatId::RGB :{ // input pixels {RRR...GGG...BBB...}
-			size_t j = 0;
+			LOG_DEBUG("PixelFormatId::RGB");
+			LOGV_DEBUG(a.size(), min, max);
+			size_t layer_stride = a.size()/3;
+			LOGV_DEBUG(layer_stride);
 			size_t k = 0;
 			for (k=0;k<3;++k){
-				for (size_t i=0; i < a.size()/3; ++i){
-					j = 4*i+k;
-					image_data[j] = (std::byte)(round_to<uint8_t>(stretch_range(a[a.size()/3*k + i], min, max, 0.0, 255.0)));
+				for (size_t i=0; i < layer_stride; ++i){
+					//if (i< 20){
+					//	LOGV_DEBUG(i, k);
+					//	LOGV_DEBUG(4*i+k);
+					//	LOGV_DEBUG(layer_stride*k + i);
+					//	LOGV_DEBUG(a[layer_stride*k + i]);
+					//}
+					image_data[4*i+k] = (std::byte)(round_to<uint8_t>(stretch_range(a[layer_stride*k + i], min, max, 0.0, 255.0)));
 				}
 			}
-			k = 3;
-			for (size_t i=0; i < a.size()/3; ++i){
-				j = 4*i+k;
-				image_data[j+k] = (std::byte)(255);
+			for (size_t i=0; i < layer_stride; ++i){
+				image_data[4*i+3] = (std::byte)(255);
 			}
+			LOGV_DEBUG(image_data);
 			break;
 		}
 		case PixelFormatId::RGBA :{ // input pixels {RRR...GGG...BBB...AAA...}
+			LOG_DEBUG("PixelFormatId::RGBA");
 			size_t j=0;
 			size_t k=0;
 			for (size_t i=0; i < a.size(); ++i){
