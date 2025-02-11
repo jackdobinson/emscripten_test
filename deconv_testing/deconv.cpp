@@ -559,7 +559,7 @@ void CleanModifiedAlgorithm::_calc_pixel_threshold(){
 }
 
 void CleanModifiedAlgorithm::_select_update_pixels(){
-	puts("Getting selected pixels");
+	LOGV_DEBUG("Getting selected pixels");
 	px_choice_map = du::mask_where(
 		residual_data, 
 		std::function<bool(double)>(
