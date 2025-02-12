@@ -57,6 +57,20 @@ EM_JS(void, js_set_dataset_cpp_array_cache, (const char* dataset_name, const voi
 	);
 });
 
+EM_JS(void, js_plot_clear, (const char* plot_name), {
+	plot_name = UTF8ToString(plot_name);
+	if(plot_name_map === undefined){
+		console.log("EM_JS: plot_name_map is undefined, cannot update any plots");
+		return;
+	}
+	if(!plot_name_map.has(plot_name)){
+		console.log("EM_JS: plot name not found", plot_name);
+		//console.log(plot_name_map);
+		return;
+	}
+	plot_name_map.get(plot_name).clear();
+})
+
 EM_JS(void, js_plot_point_from_cpp_array_cache, (const char* plot_name, const char* dataset_name, int idx_start, int idx_end, bool clear=false), {
 	plot_name = UTF8ToString(plot_name);
 	dataset_name = UTF8ToString(dataset_name);
@@ -819,15 +833,10 @@ void CleanModifiedAlgorithm::prepare_observations(
 	// get the FFT of the PSF, will need it later
 	psf_fft = fft(padded_psf_data);
 
-	du::write_as_image(_sprintf("./plots/%psf_padded.pgm", tag), padded_psf_data, data_shape);
-
-	du::write_as_image(_sprintf("./plots/%psf_fft_real.pgm", tag), du::real_part(psf_fft), data_shape);
-	du::write_as_image(_sprintf("./plots/%psf_fft_imag.pgm", tag), du::imag_part(psf_fft), data_shape);
-
-	// print the backward fft of the psf_fft to see if it agrees with the original data.
-	auto psf_fft_ifft = ifft(psf_fft);
-	du::write_as_image(_sprintf("./plots/%psf_fft_ifft_real.pgm", tag), du::real_part(psf_fft_ifft), data_shape);
-	du::write_as_image(_sprintf("./plots/%psf_fft_ifft_imag.pgm", tag), du::imag_part(psf_fft_ifft), data_shape);
+	// Clear plots
+	if (plot_update_interval > 0){
+		js_plot_clear("stopping_criteria");
+	}
 	
 	emscripten_sleep(1); // pass control back to javascript to allow event loop to run
 }
