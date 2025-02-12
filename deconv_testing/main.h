@@ -4,6 +4,7 @@
 #include <list>
 #include <functional>
 #include "deconv.hpp"
+#include "emscripten.h"
 #include "emscripten/bind.h"
 #include "tiff_helper.hpp"
 #include "storage.hpp"

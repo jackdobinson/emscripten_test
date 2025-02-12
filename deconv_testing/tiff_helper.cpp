@@ -186,12 +186,12 @@ TIFF_Ptr::TIFF_Ptr(const std::string& _name, const char* mode){
 	
 	auto tptr_it = Storage::objects<TIFF*>.find(name);
 	if(tptr_it == Storage::objects<TIFF*>.end()){
-		std::cerr << "Error: Could not get TIFF pointer as no TIFF pointer for " << name << std::endl;
+		LOG_DEBUG("Could not get TIFF pointer as no TIFF pointer for %", name);
 	} else {
 		if(tptr_it->second == nullptr){
-			std::cerr << "Could not get TIFF pointer, as TIFF pointer if NULL for " << name << std::endl;
+			LOG_DEBUG("Could not get TIFF pointer, as TIFF pointer is NULL for %", name);
 		} else {
-			LOG_DEBUG("Got TIFF pointer without opening file, therefore should NOT close it after I am done");
+			LOG_DEBUG("Got TIFF pointer without opening file, therefore should NOT close % after I am done", name);
 			p = tptr_it->second;
 		}
 	}
@@ -199,7 +199,7 @@ TIFF_Ptr::TIFF_Ptr(const std::string& _name, const char* mode){
 	if (p == nullptr){
 		p = TIFF_open(name, mode);
 		should_close=true;
-		LOG_DEBUG("Got TIFF pointer but had to open file, therefore should close it after I am done");
+		LOG_DEBUG("Got TIFF pointer but had to open file, therefore should close % after I am done", name);
 	}
 }
 TIFF_Ptr::~TIFF_Ptr(){

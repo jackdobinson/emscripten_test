@@ -4,12 +4,23 @@
 using namespace emscripten;
 
 
-using js_ptr = int;
+void update_deconv_layer_status(const std::string layer_status_string){
+	if (layer_status_string.size() > 0){
+		EM_ASM(
+			{
+				deconv_status_mgr.set("Current Deconvolution Image Layer", UTF8ToString($0));
+			}, 
+			layer_status_string.c_str()
+		);
+	}
+}
 
+
+
+using js_ptr = int;
 val get_byte_buffer(js_ptr ptr, size_t size){
 	return val(typed_memory_view(size,(uint8_t*)ptr));
 }
-
 js_ptr alloc(size_t size){
 	return (js_ptr)malloc(size);
 }
@@ -221,8 +232,16 @@ emscripten::val prepare_deconvolver(
 	// Clear task buffer
 	deconv_task_buffer.clear();
 	
+	update_deconv_layer_status("starting...");
+	
 	// Create new tasks to deconvolve each layer of the input image
 	for(int i=0; i<sci_image.shape[2]; ++i){
+		deconv_task_buffer.push_back(
+			std::bind(
+				update_deconv_layer_status,
+				std::to_string(i+1) + "/" + std::to_string(sci_image.shape[2])
+			)
+		);
 		deconv_task_buffer.push_back(
 			std::bind(
 				&CleanModifiedAlgorithm::prepare_observations,
@@ -249,6 +268,7 @@ emscripten::val prepare_deconvolver(
 			)
 		);
 	}
+	
 	/*
 	deconvolver.prepare_observations(
 		sci_image.data,
