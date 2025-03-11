@@ -23,6 +23,7 @@ namespace du = data_utils;
 
 uint32_t TIFF_get_width(const std::string& name);
 uint32_t TIFF_get_height(const std::string& name);
+uint32_t TIFF_get_colour_depth(const std::string& name);
 uint32_t TIFF_width(TIFF* tptr);
 uint32_t TIFF_height(TIFF* tptr);
 

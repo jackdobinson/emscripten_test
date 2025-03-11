@@ -234,6 +234,22 @@ uint32_t TIFF_get_height(const std::string& name){
 	return height;
 }
 
+uint32_t TIFF_get_colour_depth(const std::string& name){
+	GET_LOGGER;
+	LOG_DEBUG("Getting samples_per_pixel (colour depth) of TIFF file '%'", name);
+	TIFF_Ptr tptr(name);
+	uint32_t samples_per_pixel;
+	
+	if (! TIFFGetField(tptr, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel)){
+		puts("Warning: Could not determine samples_per_pixel for TIFF file. Assuming 1");
+		samples_per_pixel = 1;
+	}
+	
+	LOG_DEBUG("Returning colour depth of image: %", height);
+	return samples_per_pixel;
+}
+
+
 uint32_t TIFF_width(TIFF* tptr){
 	uint32_t image_width;
 	if (! TIFFGetField(tptr, TIFFTAG_IMAGEWIDTH, &image_width)){

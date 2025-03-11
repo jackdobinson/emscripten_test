@@ -198,8 +198,10 @@ emscripten::val prepare_deconvolver(
 	Image& sci_image = Storage::images[sci_image_name];
 	Image& psf_image = Storage::images[psf_image_name];
 	
-	if (sci_image.shape[2] != psf_image.shape[2]){
-		return emscripten::val("Science and PSF images have different number of colour channels. Cannot deconvolve.");
+	bool multi_channel_psf = psf_image.shape[2]>1;
+	
+	if ((sci_image.shape[2] != psf_image.shape[2]) && multi_channel_psf) {
+		return emscripten::val("PSF image must have the same number of colour channels as the Science image, OR have a single colour channel that will be used for all colour channels of the Science image. Cannot deconvolve.");
 	}
 	
 	// Create holders for results of deconvolution
@@ -248,8 +250,8 @@ emscripten::val prepare_deconvolver(
 				&deconvolver,
 				sci_image.get_span_of_layer(i),
 				sci_image.get_shape_of_layer(i),
-				psf_image.get_span_of_layer(i),
-				psf_image.get_shape_of_layer(i),
+				psf_image.get_span_of_layer(i*multi_channel_psf),
+				psf_image.get_shape_of_layer(i*multi_channel_psf),
 				run_tag
 			)
 		);
@@ -469,10 +471,14 @@ EMSCRIPTEN_BINDINGS(my_module){
 	function("remove_image", &remove_image);
 	function("TIFF_get_width", &TIFF_get_width);
 	function("TIFF_get_height", &TIFF_get_height);
+	function("TIFF_get_colour_depth", &TIFF_get_colour_depth);
 	function("image_as_JSImageData", &image_as_JSImageData);
 	function("TIFF_from_js_array", &TIFF_from_js_array);
 	function("get_byte_buffer", &get_byte_buffer);//, return_value_policy::reference());
 	function("alloc",&alloc);
+	function("Make_Gaussian_Image", &Make_Gaussian_Image);
+	function("Image_get_height", &Image_get_height);
+	function("Image_get_width", &Image_get_width);
 	
 	function("set_deconvolver_parameters",&set_deconvolver_parameters);
 

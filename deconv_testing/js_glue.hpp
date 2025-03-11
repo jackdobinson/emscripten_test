@@ -1,6 +1,8 @@
 #ifndef __JS_GLUE_INCLUDED__
 #define __JS_GLUE_INCLUDED__
 
+#include <cmath>
+
 #include "storage.hpp"
 #include "image.hpp"
 
@@ -164,5 +166,65 @@ void dump_histogram(
 
 	printf("%s", output.c_str());
 }
+
+
+inline std::string Make_Gaussian_Image(const std::string& name, const float px_angular_size, const float sigma){
+	GET_LOGGER;
+	
+	std::string msg="";
+	LOG_DEBUG("Generating gaussian image '%'", name);
+	LOGV_DEBUG(px_angular_size, sigma);
+	const float sigma_px = sigma/px_angular_size;
+	LOGV_DEBUG(sigma_px);
+	uint16_t nx = 10 * sigma_px;
+	nx += 1 - (nx % 2);
+	const uint16_t ny = nx;
+	const uint16_t cx = nx/2;
+	const uint16_t cy = ny/2;
+
+	float dx, dy;
+	float factor = 1/(sigma_px*sqrt(2*M_PI));
+
+	std::vector<double> image_data(nx*ny);
+	
+	for(int i=0;i<nx;++i){
+		dx = i - cx;
+		for(int j=0;j<ny;++j){
+			
+			dy = j - cy;
+			image_data[i*ny + j] = factor * exp(-0.5*(dx*dx + dy*dy)/(sigma_px*sigma_px));
+		}
+	}
+	
+	Storage::images.emplace(
+		std::make_pair(name, Image())
+	);
+	
+	Image& image = Storage::images[name];
+	image.pxfmt = GreyscalePixelFormat;
+	image.data = image_data;
+	image.shape = std::vector<size_t>{nx, ny, 1};
+	
+	return msg;
+}
+
+inline uint32_t Image_get_height(const std::string& name){
+	GET_LOGGER;
+	LOG_DEBUG("Getting height of Image '%'", name);
+	Image& image = Storage::images[name];
+	
+	return image.shape[1];
+}
+
+inline uint32_t Image_get_width(const std::string& name){
+	GET_LOGGER;
+	LOG_DEBUG("Getting height of Image '%'", name);
+	Image& image = Storage::images[name];
+	
+	return image.shape[0];
+}
+
+
+
 
 #endif //__JS_GLUE_INCLUDED__
